@@ -11,12 +11,12 @@ Auto WOL Manager tracks wake-on-LAN requests, stores every task row in a Cloudfl
 ## REST API
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/wol/tasks` | Returns **all** tasks (used by the UI).
-| `POST` | `/api/wol/tasks` | Create a new task. Body: `{ "macAddress": "AA:BB:CC:DD:EE:FF" }`.
-| `PUT` | `/api/wol/tasks` | Update task status. Body: `{ "id": "abc", "status": "processing" }`.
-| `GET` | `/api/wol/tasks/pending` | Returns only pending tasks (used by RouterOS).
-| `POST` | `/api/wol/tasks/notify` | Mark the matching task (by `id` or `macAddress`) as `success` once the router sees it in the ARP table.
+| --- | --- | --- |
+| `GET` | `/api/wol/tasks` | Returns **all** tasks (used by the UI). |
+| `POST` | `/api/wol/tasks` | Create a new task. Body: `{ "macAddress": "AA:BB:CC:DD:EE:FF" }`. |
+| `PUT` | `/api/wol/tasks` | Update task status. Body: `{ "id": "abc", "status": "processing" }`. |
+| `GET` | `/api/wol/tasks/pending` | Returns only pending tasks (used by RouterOS). |
+| `POST` | `/api/wol/tasks/notify` | Mark the matching task (by `id` or `macAddress`) as `success` once the router sees it in the ARP table. |
 
 All responses are JSON. Success responses return the affected `task` or `tasks` array, and failures return `{ "error": "..." }` with an appropriate HTTP status.
 
@@ -35,8 +35,25 @@ All responses are JSON. Success responses return the affected `task` or `tasks` 
 ## D1 setup
 
 1. Create a Cloudflare D1 database named `wol_tasks` (`npx wrangler d1 create wol_tasks`).
-2. Bind it as `WOL_DB` in `wrangler.json` (already configured in this repo).
+2. Bind it as `WOL_DB` in `wrangler.json`.
+   - Wrangler requires a `database_id` for D1 bindings when deploying.
+   - In CI, the GitHub Actions workflow auto-creates (or discovers) the D1 database and injects the correct `database_id` into a CI-only config file.
+   - For local deploys, you can fetch the ID via `npx wrangler d1 info wol_tasks --json` and set `database_id` for the `WOL_DB` binding.
 3. The worker auto-creates the table on first run, so no manual migrations are needed.
+
+## CI/CD (GitHub Actions)
+
+This repo includes a deploy workflow at `.github/workflows/deploy-cloudflare.yml` that:
+
+- Ensures the Pages project exists.
+- Ensures a D1 database named `wol_tasks` exists (creates it if missing).
+- Generates a CI-only Wrangler config with the correct D1 `database_id`.
+- Builds and deploys the Pages project.
+
+Required GitHub repository secrets:
+
+- `CLOUDFLARE_API_TOKEN` (API token with permissions for Pages + D1)
+- `CLOUDFLARE_ACCOUNT_ID`
 
 ## Local workflow
 

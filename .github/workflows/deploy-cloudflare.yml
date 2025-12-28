@@ -1,0 +1,241 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Deploy (Cloudflare Pages + D1)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src/**
+      - public/**
+      - package.json
+      - pnpm-lock.yaml
+      - rsbuild.config.ts
+      - rslib.config.ts
+      - tsconfig.json
+      - wrangler.json
+      - .github/workflows/deploy-cloudflare.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy auto-wol
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Cloudflare config (Pages + D1)
+        id: cfg
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const cp = require('node:child_process');
+
+          function readJson(path) {
+            return JSON.parse(fs.readFileSync(path, 'utf8'));
+          }
+
+          function writeJson(path, value) {
+            fs.writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
+          }
+
+          function run(cmd) {
+            try {
+              return cp.execSync(cmd, {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: process.env,
+              });
+            } catch (err) {
+              const stdout = err?.stdout ? String(err.stdout) : '';
+              const stderr = err?.stderr ? String(err.stderr) : '';
+              const msg = [
+                `Command failed: ${cmd}`,
+                stdout && `--- stdout ---\n${stdout}`,
+                stderr && `--- stderr ---\n${stderr}`,
+              ].filter(Boolean).join('\n');
+              throw new Error(msg);
+            }
+          }
+
+          function extractJson(output) {
+            const text = String(output ?? '');
+            const idx = text.search(/[\[{]/);
+            if (idx < 0) {
+              throw new Error(`Expected JSON output but could not find '{' or '['. Raw output:\n${text}`);
+            }
+            const jsonText = text.slice(idx).trim();
+            return JSON.parse(jsonText);
+          }
+
+          const wranglerPath = 'wrangler.json';
+          const cfg = readJson(wranglerPath);
+
+          const projectName = String(cfg?.name ?? '').trim();
+          if (!projectName) {
+            throw new Error('Could not resolve Pages project name from wrangler.json (expected: { "name": "..." })');
+          }
+
+          const accountId = String(process.env.CLOUDFLARE_ACCOUNT_ID ?? '').trim();
+          if (!accountId) {
+            throw new Error('Missing CLOUDFLARE_ACCOUNT_ID (required for Wrangler in CI).');
+          }
+
+          const compatibilityDate = String(cfg?.compatibility_date ?? '').trim();
+
+          const d1Bindings = Array.isArray(cfg?.d1_databases) ? cfg.d1_databases : [];
+          if (!d1Bindings.length) {
+            throw new Error('wrangler.json has no d1_databases bindings; expected WOL_DB -> wol_tasks.');
+          }
+
+          const targetBinding = d1Bindings.find((b) => String(b?.binding ?? '').trim() === 'WOL_DB');
+          if (!targetBinding) {
+            throw new Error('wrangler.json is missing d1_databases binding "WOL_DB".');
+          }
+
+          const databaseName = String(targetBinding?.database_name ?? '').trim();
+          if (!databaseName) {
+            throw new Error('wrangler.json d1_databases entry for WOL_DB is missing database_name.');
+          }
+
+          // Base CI config that is always valid (does NOT include d1_databases) so we can run
+          // wrangler d1 list/create without being blocked by missing database_id.
+          const baseCiConfig = { ...cfg, account_id: accountId };
+          delete baseCiConfig.d1_databases;
+
+          const baseConfigPath = 'wrangler.base.ci.json';
+          writeJson(baseConfigPath, baseCiConfig);
+
+          // Ensure the D1 database exists (create if missing) and resolve its UUID.
+          const listOut = run(`pnpm exec wrangler d1 list --json --config ${baseConfigPath}`);
+          const list = extractJson(listOut);
+
+          const existing = Array.isArray(list)
+            ? list.find((db) => String(db?.name ?? '').trim() === databaseName)
+            : null;
+
+          let dbUuid = existing?.uuid ?? existing?.id ?? existing?.database_id;
+
+          if (!dbUuid) {
+            const createOut = run(`pnpm exec wrangler d1 create ${databaseName} --json --config ${baseConfigPath}`);
+            const created = extractJson(createOut);
+            dbUuid = created?.uuid ?? created?.id ?? created?.database_id;
+          }
+
+          if (!dbUuid || dbUuid === 'null') {
+            throw new Error(`Failed to resolve D1 database UUID for "${databaseName}".`);
+          }
+
+          // Final CI config used for deploy (includes d1_databases with database_id).
+          const pagesCiConfig = {
+            ...cfg,
+            account_id: accountId,
+            d1_databases: d1Bindings.map((b) => {
+              const binding = String(b?.binding ?? '').trim();
+              const name = String(b?.database_name ?? '').trim();
+              if (binding === 'WOL_DB' || name === databaseName) {
+                return { ...b, database_id: String(dbUuid) };
+              }
+              return b;
+            }),
+          };
+
+          const pagesConfigPath = 'wrangler.pages.ci.json';
+          writeJson(pagesConfigPath, pagesCiConfig);
+
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            [
+              `pages_project=${projectName}`,
+              `compatibility_date=${compatibilityDate}`,
+              `d1_database_name=${databaseName}`,
+              `d1_database_id=${dbUuid}`,
+              `wrangler_base_config=${baseConfigPath}`,
+              `wrangler_pages_config=${pagesConfigPath}`,
+              '',
+            ].join('\n'),
+          );
+
+          console.log(`Pages project: ${projectName}`);
+          console.log(`D1: ${databaseName} (${dbUuid})`);
+          console.log(`Wrangler base config: ${baseConfigPath}`);
+          console.log(`Wrangler pages config: ${pagesConfigPath}`);
+          NODE
+
+      - name: Ensure Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ steps.cfg.outputs.pages_project }}
+          COMPATIBILITY_DATE: ${{ steps.cfg.outputs.compatibility_date }}
+          WRANGLER_BASE_CONFIG: ${{ steps.cfg.outputs.wrangler_base_config }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          project="${PAGES_PROJECT:?PAGES_PROJECT is required}"
+          compat="${COMPATIBILITY_DATE:-}"
+          config="${WRANGLER_BASE_CONFIG:?WRANGLER_BASE_CONFIG is required}"
+
+          echo "Ensuring Pages project '$project' exists (errors are safe to ignore):"
+
+          cmd=(pnpm exec wrangler pages project create "$project" --production-branch "main" --config "$config")
+          if [ -n "$compat" ]; then
+            cmd+=(--compatibility-date "$compat")
+          fi
+
+          "${cmd[@]}" || true
+
+      - name: Build (UI + Pages _worker.js)
+        run: pnpm build
+
+      - name: Deploy (Pages)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_PAGES_CONFIG: ${{ steps.cfg.outputs.wrangler_pages_config }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          config="${WRANGLER_PAGES_CONFIG:?WRANGLER_PAGES_CONFIG is required}"
+          pnpm exec wrangler deploy --config "$config"
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Cloudflare deploy"
+            echo ""
+            echo "- Pages project: ${{ steps.cfg.outputs.pages_project }}"
+            echo "- D1: ${{ steps.cfg.outputs.d1_database_name }} (${{ steps.cfg.outputs.d1_database_id }})"
+          } >> "$GITHUB_STEP_SUMMARY"
