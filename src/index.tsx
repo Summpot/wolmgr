@@ -1,9 +1,7 @@
-import { nanoid } from "nanoid";
-import { usePartySocket } from "partysocket/react";
 import type React from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { Message, WolTask } from "./shared";
+import type { WolTask } from "./shared";
 
 import "./index.css";
 
@@ -12,31 +10,34 @@ function App() {
 	const [macAddress, setMacAddress] = useState("");
 	const [error, setError] = useState("");
 
-	const socket = usePartySocket({
-		party: "chat",
-		room: "default",
-		onMessage: (evt) => {
-			const message = JSON.parse(evt.data as string) as Message;
-			if (message.type === "all-tasks") {
-				setTasks(message.tasks);
-			} else if (message.type === "add-task") {
-				setTasks((prevTasks) => [...prevTasks, message.task]);
-			} else if (message.type === "update-task") {
-				setTasks((prevTasks) =>
-					prevTasks.map((task) =>
-						task.id === message.task.id ? message.task : task,
-					),
-				);
+	const [isSubmitting, setIsSubmitting] = useState(false);
+
+	const fetchTasks = useCallback(async () => {
+		try {
+			const response = await fetch("/api/wol/tasks");
+			if (!response.ok) {
+				throw new Error("Failed to load tasks");
 			}
-		},
-	});
+			const data = (await response.json()) as { tasks?: WolTask[] };
+			setTasks(data.tasks ?? []);
+		} catch (err) {
+			console.error(err);
+			setError("Unable to load wake tasks right now.");
+		}
+	}, []);
+
+	useEffect(() => {
+		fetchTasks();
+		const intervalId = setInterval(fetchTasks, 5000);
+		return () => clearInterval(intervalId);
+	}, [fetchTasks]);
 
 	const validateMacAddress = (mac: string): boolean => {
 		const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
 		return macRegex.test(mac);
 	};
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError("");
 
@@ -45,23 +46,26 @@ function App() {
 			return;
 		}
 
-		const newTask: WolTask = {
-			id: nanoid(8),
-			macAddress: macAddress.toUpperCase(),
-			status: "pending",
-			createdAt: Date.now(),
-			updatedAt: Date.now(),
-			attempts: 0,
-		};
-
-		socket.send(
-			JSON.stringify({
-				type: "add-task",
-				task: newTask,
-			} satisfies Message),
-		);
-
-		setMacAddress("");
+		setIsSubmitting(true);
+		try {
+			const response = await fetch("/api/wol/tasks", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ macAddress: macAddress.toUpperCase() }),
+			});
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				setError(payload?.error ?? "Failed to queue the wake task.");
+				return;
+			}
+			await fetchTasks();
+			setMacAddress("");
+		} catch (err) {
+			console.error(err);
+			setError("Unable to queue the task. Please try again.");
+		} finally {
+			setIsSubmitting(false);
+		}
 	};
 
 	const getStatusBadgeClass = (status: string): string => {
@@ -105,9 +109,12 @@ function App() {
 						<div className="w-32">
 							<button
 								type="submit"
-								className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+								disabled={isSubmitting}
+								className={`w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition-colors ${
+									isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+								}`}
 							>
-								Wake Device
+								{isSubmitting ? "Queueing..." : "Wake Device"}
 							</button>
 						</div>
 					</div>

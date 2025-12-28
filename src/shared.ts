@@ -7,24 +7,6 @@ export type WolTask = {
 	attempts: number;
 };
 
-export type WolRequest = {
-	macAddress: string;
-};
-
-export type Message =
-	| {
-			type: "add-task";
-			task: WolTask;
-	  }
-	| {
-			type: "update-task";
-			task: WolTask;
-	  }
-	| {
-			type: "all-tasks";
-			tasks: WolTask[];
-	  };
-
 export type RouterOSWolResponse = {
 	tasks: {
 		macAddress: string;

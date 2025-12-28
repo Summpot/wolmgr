@@ -1,7 +1,7 @@
 {
 	"name": "auto-wol",
 	"type": "module",
-	"description": "WOL Wake-on-LAN Manager with real-time status tracking using Durable Objects.",
+	"description": "WOL Wake-on-LAN Manager that uses Cloudflare Pages + D1-backed Workers for task persistence.",
 	"cloudflare": {
 		"label": "WOL Wake-on-LAN Manager",
 		"products": [
@@ -15,8 +15,6 @@
 	},
 	"dependencies": {
 		"nanoid": "5.1.6",
-		"partyserver": "0.1.0",
-		"partysocket": "1.1.6",
 		"react": "^19.0.3",
 		"react-dom": "^19.0.3"
 	},

@@ -1,42 +1,50 @@
-# Durable Chat App
+# Auto WOL Manager
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/durable-chat-template)
+Auto WOL Manager tracks wake-on-LAN requests, stores every task row in a Cloudflare D1 database, and exposes a simple REST API so both the browser UI and RouterOS scripts can work from the same data without using Durable Objects.
 
-![Template Preview](https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/da00d330-9a3b-40a2-e6df-b08813fb7200/public)
+## Architecture
 
-<!-- dash-content-start -->
+- **React + polling UI:** the front-end polls `/api/wol/tasks` every few seconds to keep the task table fresh and calls the REST API to enqueue new wake requests.
+- **Cloudflare Worker + D1:** `_worker.ts` creates the `wol_tasks` table in the `WOL_DB` binding, persists every change, and exposes endpoints that let UI, RouterOS, and future automation manage tasks without Durable Object namespaces.
+- **RouterOS scheduler script:** `wol-routeros-script.rsc` polls `/api/wol/tasks/pending`, sends the WOL packet, updates the task to `processing`, watches the ARP table, and notifies `/api/wol/tasks/notify` as soon as the device materializes.
 
-With this template, you can deploy your own chat app to converse with other users in real-time. Going to the [demo website](https://durable-chat-template.templates.workers.dev) puts you into a unique chat room based on the ID in the url. Share that ID with others to chat with them! This is powered by [Durable Objects](https://developers.cloudflare.com/durable-objects/) and [PartyKit](https://www.partykit.io/).
+## REST API
 
-## How It Works
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/wol/tasks` | Returns **all** tasks (used by the UI).
+| `POST` | `/api/wol/tasks` | Create a new task. Body: `{ "macAddress": "AA:BB:CC:DD:EE:FF" }`.
+| `PUT` | `/api/wol/tasks` | Update task status. Body: `{ "id": "abc", "status": "processing" }`.
+| `GET` | `/api/wol/tasks/pending` | Returns only pending tasks (used by RouterOS).
+| `POST` | `/api/wol/tasks/notify` | Mark the matching task (by `id` or `macAddress`) as `success` once the router sees it in the ARP table.
 
-Users are assigned their own chat room when they first visit the page, and can talk to others by sharing their room URL. When someone joins the chat room, a WebSocket connection is opened with a [Durable Object](https://developers.cloudflare.com/durable-objects/) that stores and synchronizes the chat history.
+All responses are JSON. Success responses return the affected `task` or `tasks` array, and failures return `{ "error": "..." }` with an appropriate HTTP status.
 
-The Durable Object instance that manages the chat room runs in one location, and handles all incoming WebSocket connections. Chat messages are stored and retrieved using the [Durable Object SQL Storage API](https://developers.cloudflare.com/durable-objects/api/sql-storage/). When a new user joins the room, the existing chat history is retrieved from the Durable Object for that room. When a user sends a chat message, the message is stored in the Durable Object for that room and broadcast to all other users in that room via WebSocket connection. This template uses the [PartyKit Server API](https://docs.partykit.io/reference/partyserver-api/) to simplify the connection management logic, but could also be implemented using Durable Objects on their own.
+## RouterOS script
 
-<!-- dash-content-end -->
+1. Copy `wol-routeros-script.rsc` onto the router and update the placeholder URLs at the top with your deployed worker (e.g., `https://your-namespace.pages.dev/api/wol/tasks`).
+2. Adjust the polling interval (`INTERVAL`) as needed.
+3. The script:
+   - Fetches pending tasks from `/api/wol/tasks/pending`.
+   - Sends the WOL packet for each MAC address.
+   - Updates the task status to `processing` while waiting for the device to appear.
+   - Watches `/ip arp` and calls `/api/wol/tasks/notify` immediately when the MAC is seen.
+   - Falls back to a ping verification and marks the task `success`/`failed` if the ARP entry never appears.
+4. Install the script in the scheduler and keep it running.
 
-## Getting Started
+## D1 setup
 
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
+1. Create a Cloudflare D1 database named `wol_tasks` (`npx wrangler d1 create wol_tasks`).
+2. Bind it as `WOL_DB` in `wrangler.json` (already configured in this repo).
+3. The worker auto-creates the table on first run, so no manual migrations are needed.
 
+## Local workflow
+
+```bash
+pnpm install        # install dependencies
+pnpm build          # bundle the UI + worker
+npx wrangler dev     # preview locally (Pages + Workers enabled)
+npx wrangler deploy  # push to production
 ```
-npm create cloudflare@latest -- --template=cloudflare/templates/durable-chat-template
-```
 
-A live public deployment of this template is available at [https://durable-chat-template.templates.workers.dev](https://durable-chat-template.templates.workers.dev)
-
-## Setup Steps
-
-1. Install the project dependencies with a package manager of your choice:
-   ```bash
-   npm install
-   ```
-2. Deploy the project!
-   ```bash
-   npx wrangler deploy
-   ```
-3. Monitor your worker
-   ```bash
-   npx wrangler tail
-   ```
+Now the UI, worker, and RouterOS script all share the same D1-backed state—no Durable Objects necessary.

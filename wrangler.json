@@ -2,20 +2,16 @@
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"compatibility_date": "2025-10-08",
 	"name": "auto-wol",
-	"build": {
-		"command": "pnpm build"
-	},
 	"pages_build_output_dir": "./dist",
-	"durable_objects": {
-		"bindings": [
-			{
-				"class_name": "WolManager",
-				"name": "WolManager"
-			}
-		]
-	},
+	"d1_databases": [
+		{
+			"binding": "WOL_DB",
+			"database_name": "wol_tasks"
+		}
+	],
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 1
 	},
 	"upload_source_maps": true
 }
