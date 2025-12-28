@@ -227,6 +227,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_PAGES_CONFIG: ${{ steps.cfg.outputs.wrangler_pages_config }}
+          WRANGLER_CONFIG: ${{ steps.cfg.outputs.wrangler_pages_config }}
         shell: bash
         run: |
           set -euo pipefail
@@ -236,7 +237,6 @@ jobs:
           pnpm exec wrangler pages deploy dist \
             --project-name "$project" \
             --branch "main" \
-            --config "$config" \
             --experimental-provision \
             --experimental-auto-create
 
