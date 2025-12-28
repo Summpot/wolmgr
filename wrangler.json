@@ -14,7 +14,7 @@
 		"not_found_handling": "single-page-application"
 	},
 	"build": {
-		"command": "rsbuild build"
+		"command": "pnpm build"
 	},
 	"durable_objects": {
 		"bindings": [
