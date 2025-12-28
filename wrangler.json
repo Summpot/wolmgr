@@ -9,9 +9,5 @@
 			"database_name": "wol_tasks"
 		}
 	],
-	"observability": {
-		"enabled": true,
-		"head_sampling_rate": 1
-	},
 	"upload_source_maps": true
 }
