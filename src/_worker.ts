@@ -1,12 +1,11 @@
+import { nanoid } from "nanoid";
 import {
 	type Connection,
+	routePartykitRequest,
 	Server,
 	type WSMessage,
-	routePartykitRequest,
 } from "partyserver";
-
-import { nanoid } from "nanoid";
-import type { WolTask, Message, RouterOSWolResponse } from "./shared";
+import type { Message, RouterOSWolResponse, WolTask } from "./shared";
 
 export class WolManager extends Server<Env> {
 	static options = { hibernate: true };
@@ -57,7 +56,7 @@ export class WolManager extends Server<Env> {
 		// check if the task already exists
 		const existingTaskIndex = this.tasks.findIndex((t) => t.id === task.id);
 		let messageType: "add-task" | "update-task" = "add-task";
-		
+
 		if (existingTaskIndex >= 0) {
 			this.tasks[existingTaskIndex] = task;
 			messageType = "update-task";
@@ -103,39 +102,44 @@ export class WolManager extends Server<Env> {
 		// RouterOS API endpoint to get pending WOL tasks
 		if (pathname === "/api/wol/tasks" && request.method === "GET") {
 			// Get pending tasks
-			const pendingTasks = this.tasks.filter(task => task.status === "pending");
+			const pendingTasks = this.tasks.filter(
+				(task) => task.status === "pending",
+			);
 
 			// Format response for RouterOS
 			const response: RouterOSWolResponse = {
-				tasks: pendingTasks.map(task => ({
+				tasks: pendingTasks.map((task) => ({
 					macAddress: task.macAddress,
-					id: task.id
-				}))
+					id: task.id,
+				})),
 			};
 
 			return new Response(JSON.stringify(response), {
-				headers: { "Content-Type": "application/json" }
+				headers: { "Content-Type": "application/json" },
 			});
 		}
 
 		// API endpoint to update task status
 		if (pathname === "/api/wol/tasks" && request.method === "PUT") {
-			const body = await request.json() as { id: string; status: WolTask["status"] };
+			const body = (await request.json()) as {
+				id: string;
+				status: WolTask["status"];
+			};
 			const { id, status } = body;
 
 			if (!id || !status) {
 				return new Response(JSON.stringify({ error: "Missing id or status" }), {
 					status: 400,
-					headers: { "Content-Type": "application/json" }
+					headers: { "Content-Type": "application/json" },
 				});
 			}
 
 			// Find the task
-			const task = this.tasks.find(t => t.id === id);
+			const task = this.tasks.find((t) => t.id === id);
 			if (!task) {
 				return new Response(JSON.stringify({ error: "Task not found" }), {
 					status: 404,
-					headers: { "Content-Type": "application/json" }
+					headers: { "Content-Type": "application/json" },
 				});
 			}
 
@@ -144,19 +148,22 @@ export class WolManager extends Server<Env> {
 				...task,
 				status: status,
 				updatedAt: Date.now(),
-				attempts: status === "processing" ? task.attempts + 1 : task.attempts
+				attempts: status === "processing" ? task.attempts + 1 : task.attempts,
 			};
 
 			this.saveTask(updatedTask);
 
-			return new Response(JSON.stringify({ success: true, task: updatedTask }), {
-				headers: { "Content-Type": "application/json" }
-			});
+			return new Response(
+				JSON.stringify({ success: true, task: updatedTask }),
+				{
+					headers: { "Content-Type": "application/json" },
+				},
+			);
 		}
 
 		return new Response(JSON.stringify({ error: "Not found" }), {
 			status: 404,
-			headers: { "Content-Type": "application/json" }
+			headers: { "Content-Type": "application/json" },
 		});
 	}
 }
@@ -175,20 +182,24 @@ export default {
 		// RouterOS API endpoint to get pending WOL tasks
 		if (pathname === "/api/wol/tasks" && request.method === "GET") {
 			// Forward the request to the durable object
-			return await stub.fetch(new Request(request.url, {
-				method: "GET",
-				headers: request.headers,
-			}));
+			return await stub.fetch(
+				new Request(request.url, {
+					method: "GET",
+					headers: request.headers,
+				}),
+			);
 		}
 
 		// API endpoint to update task status
 		if (pathname === "/api/wol/tasks" && request.method === "PUT") {
 			// Forward the request to the durable object
-			return await stub.fetch(new Request(request.url, {
-				method: "PUT",
-				headers: request.headers,
-				body: request.body,
-			}));
+			return await stub.fetch(
+				new Request(request.url, {
+					method: "PUT",
+					headers: request.headers,
+					body: request.body,
+				}),
+			);
 		}
 
 		// Handle PartyKit WebSocket requests

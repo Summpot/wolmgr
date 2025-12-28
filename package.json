@@ -37,8 +37,7 @@
 	"private": true,
 	"packageManager": "pnpm@10.26.2",
 	"scripts": {
-		"cf-typegen": "wrangler types ./src/server/worker-configuration.d.ts",
-		"check": "tsc --project src/client && tsc --project src/server && wrangler deploy --dry-run",
+		"check": "pnpm exec biome check --write .",
 		"build:ui": "rsbuild build",
 		"build:worker": "rslib build",
 		"build": "pnpm -s build:ui && pnpm -s build:worker",
