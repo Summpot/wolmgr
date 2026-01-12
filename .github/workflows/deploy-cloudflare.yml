@@ -116,8 +116,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          node <<'NODE'
-          const fs = require('node:fs');
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
 
           const org = String(process.env.TURSO_ORG_SLUG ?? '').trim();
           const name = String(process.env.TURSO_DB_NAME ?? '').trim();
