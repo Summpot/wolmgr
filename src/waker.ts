@@ -14,7 +14,9 @@ const TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS wol_tasks (
 	status TEXT NOT NULL,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL,
-	attempts INTEGER NOT NULL
+	attempts INTEGER NOT NULL,
+	user_id TEXT,
+	device_id TEXT
 )`;
 
 function env(name: string, fallback?: string): string {

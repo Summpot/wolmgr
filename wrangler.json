@@ -1,6 +1,7 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"compatibility_date": "2025-10-08",
+	"compatibility_flags": ["nodejs_compat"],
 	"name": "wolmgr",
 	"pages_build_output_dir": "./dist",
 	"upload_source_maps": true

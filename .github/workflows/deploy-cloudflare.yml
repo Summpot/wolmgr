@@ -208,6 +208,35 @@ jobs:
           printf "%s" "$TURSO_DATABASE_URL" | pnpm exec wrangler pages secret put TURSO_DATABASE_URL --project-name "$project"
           printf "%s" "$TURSO_AUTH_TOKEN" | pnpm exec wrangler pages secret put TURSO_AUTH_TOKEN --project-name "$project"
 
+      - name: Configure Pages secrets (Auth / automation, optional)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ steps.cfg.outputs.pages_project }}
+          GITHUB_CLIENT_ID: ${{ secrets.CLOUDFLARE_PAGES_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_PAGES_GITHUB_CLIENT_SECRET }}
+          WAKER_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_WAKER_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          project="${PAGES_PROJECT:?PAGES_PROJECT is required}"
+
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              echo "Setting secret: $name"
+              printf "%s" "$value" | pnpm exec wrangler pages secret put "$name" --project-name "$project"
+            else
+              echo "Skipping secret (not provided): $name"
+            fi
+          }
+
+          put_secret GITHUB_CLIENT_ID "${GITHUB_CLIENT_ID:-}"
+          put_secret GITHUB_CLIENT_SECRET "${GITHUB_CLIENT_SECRET:-}"
+          put_secret WAKER_API_TOKEN "${WAKER_API_TOKEN:-}"
+
       - name: Build (UI + Pages _worker.js)
         run: pnpm build
 

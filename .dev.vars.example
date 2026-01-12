@@ -2,3 +2,13 @@
 # Copy to .dev.vars and fill in.
 TURSO_DATABASE_URL=
 TURSO_AUTH_TOKEN=
+
+# GitHub OAuth (optional)
+# Create a GitHub OAuth App and set callback URL to:
+#   http://localhost:8788/api/auth/github/callback
+# (Wrangler may use a different port; use the dev server origin shown in its output.)
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
+# Optional: protect automation endpoints (RouterOS script / other bots)
+WAKER_API_TOKEN=

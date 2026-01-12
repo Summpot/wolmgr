@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Build Docker Image (waker)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+    paths:
+      - Dockerfile
+      - src/**
+      - package.json
+      - pnpm-lock.yaml
+      - tsconfig.json
+      - rslib.config.ts
+      - .github/workflows/build-docker.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Dockerfile
+      - src/**
+      - package.json
+      - pnpm-lock.yaml
+      - tsconfig.json
+      - rslib.config.ts
+      - .github/workflows/build-docker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  normalize-image-name:
+    name: Normalize Docker image name
+    runs-on: ubuntu-latest
+    outputs:
+      image-name: ${{ steps.normalize.outputs.image-name }}
+    steps:
+      - name: Normalize repository name
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY}"
+          image_name=$(echo "$repo" | tr '[:upper:]' '[:lower:]')
+          echo "image-name=$image_name" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (linux/amd64, linux/arm64)
+    runs-on: ubuntu-latest
+    needs: [normalize-image-name]
+    env:
+      IMAGE_NAME: ${{ needs.normalize-image-name.outputs.image-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build (and push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Docker build"
+            echo ""
+            echo "- Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+            echo "- Platforms: linux/amd64, linux/arm64"
+            echo "- Pushed: ${{ github.event_name != 'pull_request' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

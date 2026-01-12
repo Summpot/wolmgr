@@ -21,7 +21,7 @@ RUN pnpm -s build:worker
 
 
 # Runtime stage: bun executes the bundled script.
-FROM oven/bun:1.1.38-alpine AS runtime
+FROM oven/bun:alpine AS runtime
 
 WORKDIR /app
 

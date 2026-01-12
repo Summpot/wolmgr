@@ -2,6 +2,7 @@
 	"compilerOptions": {
 		"target": "esnext",
 		"lib": ["esnext", "dom", "dom.iterable"],
+		"jsx": "react-jsx",
 		"module": "esnext",
 		"moduleResolution": "bundler",
 		"types": ["@cloudflare/workers-types", "node"],
