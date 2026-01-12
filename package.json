@@ -1,9 +1,9 @@
 {
-	"name": "auto-wol",
+	"name": "wolmgr",
 	"type": "module",
-	"description": "WOL Wake-on-LAN Manager that uses Cloudflare Pages + D1-backed Workers for task persistence.",
+	"description": "WOL Wake-on-LAN Manager that uses Cloudflare Pages + Turso (libSQL) for task persistence.",
 	"cloudflare": {
-		"label": "WOL Wake-on-LAN Manager",
+		"label": "wolmgr",
 		"products": [
 			"Workers",
 			"Durable Objects"
@@ -14,16 +14,20 @@
 		"publish": true
 	},
 	"dependencies": {
+		"@libsql/client": "^0.15.11",
 		"nanoid": "5.1.6",
+		"ros-client": "^1.1.2",
 		"react": "^19.0.3",
 		"react-dom": "^19.0.3"
 	},
 	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20250129.0",
 		"@biomejs/biome": "2.3.10",
 		"@rsbuild/core": "^1.6.15",
 		"@rsbuild/plugin-react": "^1.4.2",
 		"@rslib/core": "^0.18.6",
 		"@tailwindcss/postcss": "^4.1.18",
+		"@types/node": "^24.0.0",
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
 		"autoprefixer": "^10.4.23",

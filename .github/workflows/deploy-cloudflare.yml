@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 
-name: Deploy (Cloudflare Pages + D1)
+name: Deploy (Cloudflare Pages + Turso)
 
 on:
   push:
@@ -15,6 +15,7 @@ on:
       - rslib.config.ts
       - tsconfig.json
       - wrangler.json
+      - Dockerfile
       - .github/workflows/deploy-cloudflare.yml
   workflow_dispatch:
 
@@ -27,7 +28,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy auto-wol
+    name: Deploy wolmgr
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,137 +46,30 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prepare Cloudflare config (Pages + D1)
+      - name: Resolve Cloudflare config (Pages)
         id: cfg
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
 
           node <<'NODE'
           const fs = require('node:fs');
-          const cp = require('node:child_process');
-
-          function readJson(path) {
-            return JSON.parse(fs.readFileSync(path, 'utf8'));
-          }
-
-          function writeJson(path, value) {
-            fs.writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
-          }
-
-          function run(cmd) {
-            try {
-              return cp.execSync(cmd, {
-                encoding: 'utf8',
-                stdio: ['ignore', 'pipe', 'pipe'],
-                env: process.env,
-              });
-            } catch (err) {
-              const stdout = err?.stdout ? String(err.stdout) : '';
-              const stderr = err?.stderr ? String(err.stderr) : '';
-              const msg = [
-                `Command failed: ${cmd}`,
-                stdout && `--- stdout ---\n${stdout}`,
-                stderr && `--- stderr ---\n${stderr}`,
-              ].filter(Boolean).join('\n');
-              throw new Error(msg);
-            }
-          }
-
-          function extractJson(output) {
-            const text = String(output ?? '');
-            const idx = text.search(/[\[{]/);
-            if (idx < 0) {
-              throw new Error(`Expected JSON output but could not find '{' or '['. Raw output:\n${text}`);
-            }
-            const jsonText = text.slice(idx).trim();
-            return JSON.parse(jsonText);
-          }
 
           const wranglerPath = 'wrangler.json';
-          const cfg = readJson(wranglerPath);
+          const cfg = JSON.parse(fs.readFileSync(wranglerPath, 'utf8'));
 
           const projectName = String(cfg?.name ?? '').trim();
           if (!projectName) {
             throw new Error('Could not resolve Pages project name from wrangler.json (expected: { "name": "..." })');
           }
 
-          const accountId = String(process.env.CLOUDFLARE_ACCOUNT_ID ?? '').trim();
-          if (!accountId) {
-            throw new Error('Missing CLOUDFLARE_ACCOUNT_ID (required for Wrangler in CI).');
-          }
-
           const compatibilityDate = String(cfg?.compatibility_date ?? '').trim();
-
-          const d1Bindings = Array.isArray(cfg?.d1_databases) ? cfg.d1_databases : [];
-          if (!d1Bindings.length) {
-            throw new Error('wrangler.json has no d1_databases bindings; expected WOL_DB -> wol_tasks.');
-          }
-
-          const targetBinding = d1Bindings.find((b) => String(b?.binding ?? '').trim() === 'WOL_DB');
-          if (!targetBinding) {
-            throw new Error('wrangler.json is missing d1_databases binding "WOL_DB".');
-          }
-
-          const databaseName = String(targetBinding?.database_name ?? '').trim();
-          if (!databaseName) {
-            throw new Error('wrangler.json d1_databases entry for WOL_DB is missing database_name.');
-          }
-
-          function runD1(subcommand) {
-            return run(`pnpm exec wrangler d1 ${subcommand}`);
-          }
-
-          // Ensure the D1 database exists (create if missing) and resolve its UUID.
-          let listOut = runD1('list --json');
-          let list = extractJson(listOut);
-
-          let existing = Array.isArray(list)
-            ? list.find((db) => String(db?.name ?? '').trim() === databaseName)
-            : null;
-
-          let dbUuid = existing?.uuid ?? existing?.id ?? existing?.database_id;
-
-          if (!dbUuid) {
-            console.log(`D1 database "${databaseName}" missing; creating it now.`);
-            runD1(`create "${databaseName}"`);
-
-            listOut = runD1('list --json');
-            list = extractJson(listOut);
-            existing = Array.isArray(list)
-              ? list.find((db) => String(db?.name ?? '').trim() === databaseName)
-              : null;
-            dbUuid = existing?.uuid ?? existing?.id ?? existing?.database_id;
-          }
-
-          if (!dbUuid || dbUuid === 'null') {
-            throw new Error(`Failed to resolve D1 database UUID for "${databaseName}".`);
-          }
-
-          const updatedConfig = {
-            ...cfg,
-            d1_databases: d1Bindings.map((b) => {
-              const binding = String(b?.binding ?? '').trim();
-              const name = String(b?.database_name ?? '').trim();
-              if (binding === 'WOL_DB' || name === databaseName) {
-                return { ...b, database_id: String(dbUuid) };
-              }
-              return b;
-            }),
-          };
-
-          writeJson(wranglerPath, updatedConfig);
 
           fs.appendFileSync(
             process.env.GITHUB_OUTPUT,
             [
               `pages_project=${projectName}`,
               `compatibility_date=${compatibilityDate}`,
-              `d1_database_name=${databaseName}`,
-              `d1_database_id=${dbUuid}`,
               `wrangler_base_config=${wranglerPath}`,
               `wrangler_pages_config=${wranglerPath}`,
               '',
@@ -183,7 +77,6 @@ jobs:
           );
 
           console.log(`Pages project: ${projectName}`);
-          console.log(`D1: ${databaseName} (${dbUuid})`);
           console.log(`Wrangler config: ${wranglerPath}`);
           NODE
 
@@ -212,6 +105,109 @@ jobs:
 
           "${cmd[@]}" || true
 
+      - name: Ensure Turso database exists (Platform API)
+        id: turso
+        env:
+          TURSO_PLATFORM_API_TOKEN: ${{ secrets['TURSO_PLATFORM_API_TOKEN'] }}
+          TURSO_ORG_SLUG: ${{ secrets['TURSO_ORG_SLUG'] }}
+          TURSO_DB_NAME: ${{ secrets['TURSO_DB_NAME'] }}
+          TURSO_GROUP: ${{ secrets['TURSO_GROUP'] }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const org = String(process.env.TURSO_ORG_SLUG ?? '').trim();
+          const name = String(process.env.TURSO_DB_NAME ?? '').trim();
+          const group = String(process.env.TURSO_GROUP ?? 'default').trim() || 'default';
+          const token = String(process.env.TURSO_PLATFORM_API_TOKEN ?? '').trim();
+
+          if (!org) throw new Error('Missing TURSO_ORG_SLUG');
+          if (!name) throw new Error('Missing TURSO_DB_NAME');
+          if (!token) throw new Error('Missing TURSO_PLATFORM_API_TOKEN');
+
+          async function api(path, init = {}) {
+            const res = await fetch(`https://api.turso.tech${path}`, {
+              ...init,
+              headers: {
+                Authorization: `Bearer ${token}`,
+                ...(init.headers ?? {}),
+              },
+            });
+            const text = await res.text();
+            const json = text ? JSON.parse(text) : null;
+            if (!res.ok) {
+              const err = new Error(`Turso API ${res.status} ${res.statusText} on ${path}`);
+              err.details = json;
+              throw err;
+            }
+            return json;
+          }
+
+          // Create DB if missing.
+          const list = await api(`/v1/organizations/${encodeURIComponent(org)}/databases`);
+          const databases = Array.isArray(list?.databases) ? list.databases : [];
+          const exists = databases.some((db) => String(db?.Name ?? '').trim() === name);
+
+          if (!exists) {
+            try {
+              await api(`/v1/organizations/${encodeURIComponent(org)}/databases`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, group }),
+              });
+            } catch (err) {
+              // Concurrent create can happen; allow it to proceed.
+              const status = String(err?.details?.error ?? '');
+              if (!String(err.message ?? '').includes('409') && !status.toLowerCase().includes('already')) {
+                throw err;
+              }
+            }
+          }
+
+          // Retrieve Hostname.
+          const db = await api(`/v1/organizations/${encodeURIComponent(org)}/databases/${encodeURIComponent(name)}`);
+          const hostname = String(db?.database?.Hostname ?? '').trim();
+          if (!hostname) throw new Error('Turso API: missing database.Hostname');
+          const databaseUrl = `https://${hostname}`;
+
+          // Create a database auth token.
+          const tok = await api(`/v1/organizations/${encodeURIComponent(org)}/databases/${encodeURIComponent(name)}/auth/tokens?authorization=full-access`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const jwt = String(tok?.jwt ?? '').trim();
+          if (!jwt) throw new Error('Turso API: missing jwt');
+
+          console.log(`::add-mask::${jwt}`);
+
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            [`turso_database_url=${databaseUrl}`, `turso_auth_token=${jwt}`, ''].join('\n'),
+          );
+
+          console.log(`Turso database ensured: ${name} (${databaseUrl})`);
+          NODE
+
+      - name: Configure Pages secrets (Turso)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ steps.cfg.outputs.pages_project }}
+          TURSO_DATABASE_URL: ${{ steps.turso.outputs.turso_database_url }}
+          TURSO_AUTH_TOKEN: ${{ steps.turso.outputs.turso_auth_token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          project="${PAGES_PROJECT:?PAGES_PROJECT is required}"
+
+          printf "%s" "$TURSO_DATABASE_URL" | pnpm exec wrangler pages secret put TURSO_DATABASE_URL --project-name "$project"
+          printf "%s" "$TURSO_AUTH_TOKEN" | pnpm exec wrangler pages secret put TURSO_AUTH_TOKEN --project-name "$project"
+
       - name: Build (UI + Pages _worker.js)
         run: pnpm build
 
@@ -239,5 +235,5 @@ jobs:
             echo "## Cloudflare deploy"
             echo ""
             echo "- Pages project: ${{ steps.cfg.outputs.pages_project }}"
-            echo "- D1: ${{ steps.cfg.outputs.d1_database_name }} (${{ steps.cfg.outputs.d1_database_id }})"
+            echo "- Data store: Turso (libSQL)"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,7 @@
 # RouterOS Script for WOL Wake-on-LAN Manager (DHCP Mode)
 
-:global WolTasksUrl "https://auto-wol.pages.dev/api/wol/tasks"
-:global WolNotifyUrl "https://auto-wol.pages.dev/api/wol/tasks/notify"
+:global WolTasksUrl "https://wolmgr.pages.dev/api/wol/tasks"
+:global WolNotifyUrl "https://wolmgr.pages.dev/api/wol/tasks/notify"
 
 :global WolInterface "ether2"
 

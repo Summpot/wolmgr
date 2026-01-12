@@ -188,7 +188,7 @@ function App() {
 		return macRegex.test(mac);
 	};
 
-	const formatMacAddress = (value: string) => {
+	const _formatMacAddress = (value: string) => {
 		// Basic formatter: remove non-hex, add colons
 		const raw = value.replace(/[^0-9A-Fa-f]/g, "");
 		const chunks = raw.match(/.{1,2}/g) || [];
@@ -309,7 +309,9 @@ function App() {
 							<div className="flex flex-col sm:flex-row gap-4">
 								<div className="flex-1 relative group">
 									<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-										<span className="text-slate-400 font-mono text-sm">MAC:</span>
+										<span className="text-slate-400 font-mono text-sm">
+											MAC:
+										</span>
 									</div>
 									<input
 										type="text"
@@ -406,9 +408,7 @@ function App() {
 													<div className="p-3 bg-slate-50 rounded-full">
 														<Icons.Clock />
 													</div>
-													<p className="text-slate-500">
-														No wake tasks found.
-													</p>
+													<p className="text-slate-500">No wake tasks found.</p>
 												</div>
 											</td>
 										</tr>
@@ -458,4 +458,8 @@ function App() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-createRoot(document.getElementById("root")!).render(<App />);
+const root = document.getElementById("root");
+if (!root) {
+	throw new Error('Missing root element: expected an element with id="root"');
+}
+createRoot(root).render(<App />);

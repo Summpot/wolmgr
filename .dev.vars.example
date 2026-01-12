@@ -1,0 +1,4 @@
+# Cloudflare Wrangler (local dev)
+# Copy to .dev.vars and fill in.
+TURSO_DATABASE_URL=
+TURSO_AUTH_TOKEN=

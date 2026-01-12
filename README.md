@@ -1,12 +1,12 @@
-# Auto WOL Manager
+# wolmgr
 
-Auto WOL Manager tracks wake-on-LAN requests, stores every task row in a Cloudflare D1 database, and exposes a simple REST API so both the browser UI and RouterOS scripts can work from the same data without using Durable Objects.
+wolmgr tracks wake-on-LAN requests, stores every task row in **Turso (libSQL)**, and exposes a simple REST API so both the browser UI and automations can work from the same data.
 
 ## Architecture
 
 - **React + polling UI:** the front-end polls `/api/wol/tasks` every few seconds to keep the task table fresh and calls the REST API to enqueue new wake requests.
-- **Cloudflare Worker + D1:** `_worker.ts` creates the `wol_tasks` table in the `WOL_DB` binding, persists every change, and exposes endpoints that let UI, RouterOS, and future automation manage tasks without Durable Object namespaces.
-- **RouterOS scheduler script:** `wol-routeros-script.rsc` polls `/api/wol/tasks/pending`, sends the WOL packet, updates the task to `processing`, watches the ARP table, and notifies `/api/wol/tasks/notify` as soon as the device materializes.
+- **Cloudflare Worker + Turso:** `_worker.ts` creates the `wol_tasks` table in Turso on first request, persists every change, and exposes endpoints that let UI (and optional RouterOS scripts) manage tasks.
+- **bun waker (Docker):** `src/waker.ts` runs outside of Workers and polls Turso **every 10 seconds**, claims pending tasks, and sends WOL broadcasts directly. If RouterOS env vars are configured, it uses RouterOS API to proxy the WOL send.
 
 ## REST API
 
@@ -20,7 +20,7 @@ Auto WOL Manager tracks wake-on-LAN requests, stores every task row in a Cloudfl
 
 All responses are JSON. Success responses return the affected `task` or `tasks` array, and failures return `{ "error": "..." }` with an appropriate HTTP status.
 
-## RouterOS script
+## RouterOS script (optional)
 
 1. Copy `wol-routeros-script.rsc` onto the router and update the placeholder URLs at the top with your deployed worker (e.g., `https://your-namespace.pages.dev/api/wol/tasks`).
 2. Adjust the polling interval (`INTERVAL`) as needed.
@@ -32,28 +32,34 @@ All responses are JSON. Success responses return the affected `task` or `tasks` 
    - Falls back to a ping verification and marks the task `success`/`failed` if the ARP entry never appears.
 4. Install the script in the scheduler and keep it running.
 
-## D1 setup
+## Turso setup
 
-1. Create a Cloudflare D1 database named `wol_tasks` (`npx wrangler d1 create wol_tasks`).
-2. Bind it as `WOL_DB` in `wrangler.json`.
-   - Wrangler requires a `database_id` for D1 bindings when deploying.
-   - In CI, the GitHub Actions workflow auto-creates (or discovers) the D1 database and injects the correct `database_id` into a CI-only config file.
-   - For local deploys, you can fetch the ID via `npx wrangler d1 info wol_tasks --json` and set `database_id` for the `WOL_DB` binding.
-3. The worker auto-creates the table on first run, so no manual migrations are needed.
+1. Create a Turso database (or let CI create it for you).
+2. Configure the Cloudflare Pages project with:
+   - `TURSO_DATABASE_URL` (recommended: the **HTTP** URL, e.g. `https://<db>-<org>.turso.io`)
+   - `TURSO_AUTH_TOKEN` (database auth token / JWT)
+3. The worker auto-creates the `wol_tasks` table on first run, so no manual migrations are needed.
 
 ## CI/CD (GitHub Actions)
 
 This repo includes a deploy workflow at `.github/workflows/deploy-cloudflare.yml` that:
 
 - Ensures the Pages project exists.
-- Ensures a D1 database named `wol_tasks` exists (creates it if missing).
-- Generates a CI-only Wrangler config with the correct D1 `database_id`.
+- Ensures a Turso database exists (creates it if missing) using the **Turso Platform API**.
+- Generates a fresh database auth token and configures the Pages project secrets.
 - Builds and deploys the Pages project.
 
 Required GitHub repository secrets:
 
-- `CLOUDFLARE_API_TOKEN` (API token with permissions for Pages + D1)
+- `CLOUDFLARE_API_TOKEN` (API token with permissions for Cloudflare Pages)
 - `CLOUDFLARE_ACCOUNT_ID`
+
+Turso secrets:
+
+- `TURSO_PLATFORM_API_TOKEN` (Platform API token)
+- `TURSO_ORG_SLUG` (your org/user slug)
+- `TURSO_DB_NAME` (e.g. `wolmgr`)
+- `TURSO_GROUP` (optional; defaults to `default`)
 
 ## Local workflow
 
@@ -64,4 +70,34 @@ npx wrangler dev     # preview locally (Pages + Workers enabled)
 npx wrangler deploy  # push to production
 ```
 
-Now the UI, worker, and RouterOS script all share the same D1-backed state—no Durable Objects necessary.
+## bun waker (Docker)
+
+The Docker image runs the bundled `waker` with bun, and **talks to Turso directly** (it does not call the Worker API).
+
+Environment variables (minimum):
+
+- `TURSO_DATABASE_URL`
+- `TURSO_AUTH_TOKEN`
+
+Optional RouterOS proxy:
+
+- `ROUTEROS_ENABLED=true`
+- `ROUTEROS_HOST`, `ROUTEROS_USER`, `ROUTEROS_PASSWORD`
+- `ROUTEROS_PORT` (default `8728`), `ROUTEROS_TLS` (default `false`)
+- `ROUTEROS_WOL_INTERFACE` (optional)
+
+Example:
+
+```bash
+docker build -t wolmgr-waker .
+docker run --rm \
+   -e TURSO_DATABASE_URL=... \
+   -e TURSO_AUTH_TOKEN=... \
+   wolmgr-waker
+```
+
+## Notes
+
+- The user request mentioned `libsql-client-ts`, but that exact package name is not available on npm; this project uses the official libSQL/Turso TypeScript client: `@libsql/client`.
+
+Now the UI, worker, and (optional) RouterOS script all share the same Turso-backed state—no Durable Objects necessary.

@@ -10,6 +10,7 @@ export default defineConfig({
 	source: {
 		entry: {
 			_worker: "./src/_worker.ts",
+			waker: "./src/waker.ts",
 		},
 	},
 	output: {

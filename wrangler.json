@@ -1,13 +1,7 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"compatibility_date": "2025-10-08",
-	"name": "auto-wol",
+	"name": "wolmgr",
 	"pages_build_output_dir": "./dist",
-	"d1_databases": [
-		{
-			"binding": "WOL_DB",
-			"database_name": "wol_tasks"
-		}
-	],
 	"upload_source_maps": true
 }
