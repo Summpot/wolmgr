@@ -98,7 +98,7 @@ jobs:
 
           echo "Ensuring Pages project '$project' exists (errors are safe to ignore):"
 
-          cmd=(pnpm exec wrangler pages project create "$project" --production-branch "main" --config "$config" --account-id "$account")
+          cmd=(pnpm exec wrangler pages project create "$project" --production-branch "main" --config "$config")
           if [ -n "$compat" ]; then
             cmd+=(--compatibility-date "$compat")
           fi
