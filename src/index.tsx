@@ -398,31 +398,31 @@ function App() {
 		switch (status) {
 			case "pending":
 				return {
-					className: "bg-yellow-100 text-yellow-800 border-yellow-200",
+					className: "nb-chip nb-chip--pending",
 					icon: <Icons.Clock />,
 					label: "Pending",
 				};
 			case "processing":
 				return {
-					className: "bg-blue-100 text-blue-800 border-blue-200",
+					className: "nb-chip nb-chip--processing",
 					icon: <Icons.Activity />,
 					label: "Processing",
 				};
 			case "success":
 				return {
-					className: "bg-emerald-100 text-emerald-800 border-emerald-200",
+					className: "nb-chip nb-chip--success",
 					icon: <Icons.CheckCircle />,
 					label: "Sent",
 				};
 			case "failed":
 				return {
-					className: "bg-red-100 text-red-800 border-red-200",
+					className: "nb-chip nb-chip--failed",
 					icon: <Icons.XCircle />,
 					label: "Failed",
 				};
 			default:
 				return {
-					className: "bg-gray-100 text-gray-800 border-gray-200",
+					className: "nb-chip",
 					icon: <Icons.Clock />,
 					label: status,
 				};
@@ -441,19 +441,27 @@ function App() {
 
 	if (!me) {
 		return (
-			<div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-				<div className="max-w-3xl mx-auto space-y-8">
-					<div className="text-center space-y-2">
-						<div className="flex justify-center mb-4">
-							<div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-200">
-								<Icons.Server />
+			<div className="nb-page">
+				<div className="nb-container nb-stack">
+					<div className="nb-topbar">
+						<div className="nb-brand">
+							<Icons.Server />
+							<div>
+								<div className="nb-brand__title">wolmgr</div>
+								<div className="nb-tagline">Wake-on-LAN manager with GitHub OAuth + Passkeys.</div>
 							</div>
 						</div>
-						<h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-							wolmgr
-						</h1>
-						<p className="text-lg text-slate-600">
-							Wake-on-LAN manager with GitHub OAuth + Passkeys.
+						<div className="nb-doodles" aria-hidden="true">
+							✷ ⚡ ★
+						</div>
+					</div>
+					<div className="nb-card nb-card--yellow">
+						<span className="nb-sticker">BOOTING</span>
+						<p style={{ margin: 0 }}>
+							Loading your dashboard…
+						</p>
+						<p style={{ margin: "10px 0 0", opacity: 0.8, fontSize: 13 }}>
+							If this takes long, check your Worker/API availability.
 						</p>
 					</div>
 				</div>
@@ -463,49 +471,52 @@ function App() {
 
 	if (!user) {
 		return (
-			<div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-				<div className="max-w-3xl mx-auto space-y-8">
-					<div className="text-center space-y-2">
-						<div className="flex justify-center mb-4">
-							<div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-200">
+			<div className="nb-page">
+				<div className="nb-container nb-stack">
+					<div className="nb-topbar">
+						<div>
+							<div className="nb-brand">
 								<Icons.Server />
+								<div>
+									<div className="nb-brand__title">wolmgr</div>
+									<div className="nb-tagline">Sign in to manage devices and wake them in one click.</div>
+								</div>
+							</div>
+							<div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>
+								<span aria-hidden="true">↳</span> Startup vibes, serious packets.
 							</div>
 						</div>
-						<h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-							wolmgr
-						</h1>
-						<p className="text-lg text-slate-600">
-							Sign in to manage devices and wake them in one click.
-						</p>
+						<div className="nb-doodles" aria-hidden="true">
+							⚡︎ NEW ✶ STUFF
+						</div>
 					</div>
 
-					<div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
-						<div className="p-6 sm:p-8 space-y-4">
-							<div className="flex flex-col sm:flex-row gap-3">
-								<button
-									type="button"
-									onClick={handleGitHubLogin}
-									disabled={isAuthBusy || isPasskeyBusy}
-									className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 shadow-lg transition-all"
-								>
-									Sign in with GitHub
-								</button>
-								<button
-									type="button"
-									onClick={handlePasskeyLogin}
-									disabled={isAuthBusy || isPasskeyBusy}
-									className="inline-flex items-center justify-center px-6 py-3 border border-slate-200 text-base font-medium rounded-xl text-slate-900 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all"
-								>
-									Sign in with Passkey
-								</button>
-							</div>
-							{authError && (
-								<div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center text-red-700 text-sm">
-									<Icons.AlertCircle />
-									<span className="ml-2">{authError}</span>
-								</div>
-							)}
+					<div className="nb-card nb-card--pink">
+						<span className="nb-sticker">SIGN IN</span>
+						<div className="nb-btnrow">
+							<button
+								type="button"
+								onClick={handleGitHubLogin}
+								disabled={isAuthBusy || isPasskeyBusy}
+								className="nb-btn nb-btn--black"
+							>
+								Sign in with GitHub
+							</button>
+							<button
+								type="button"
+								onClick={handlePasskeyLogin}
+								disabled={isAuthBusy || isPasskeyBusy}
+								className="nb-btn nb-btn--yellow"
+							>
+								Sign in with Passkey
+							</button>
 						</div>
+						{authError && (
+							<div className="nb-alert nb-alert--error" style={{ marginTop: 12 }}>
+								<Icons.AlertCircle />
+								<div className="nb-alert__text">{authError}</div>
+							</div>
+						)}
 					</div>
 				</div>
 			</div>
@@ -515,193 +526,194 @@ function App() {
 	const deviceNameById = new Map(devices.map((d) => [d.id, d.name ?? d.macAddress]));
 
 	return (
-		<div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-			<div className="max-w-4xl mx-auto space-y-8">
-				<div className="flex items-center justify-between">
-					<div className="space-y-1">
-						<h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-							wolmgr
-						</h1>
-						<p className="text-slate-600">
-							Signed in as <span className="font-medium">{user.githubLogin}</span>
-						</p>
+		<div className="nb-page">
+			<div className="nb-container nb-stack">
+				<div className="nb-topbar">
+					<div>
+						<div className="nb-brand">
+							<Icons.Server />
+							<div>
+								<div className="nb-brand__title">wolmgr</div>
+								<div className="nb-tagline">
+									Signed in as <span style={{ fontWeight: 900 }}>{user.githubLogin}</span>
+								</div>
+							</div>
+						</div>
 					</div>
-					<div className="flex items-center gap-3">
+					<div className="nb-userchip">
 						{user.avatarUrl && (
 							<img
 								src={user.avatarUrl}
 								alt={user.githubLogin}
-								className="w-10 h-10 rounded-full border border-slate-200"
+								className="nb-avatar"
 							/>
 						)}
 						<button
 							type="button"
 							onClick={handleLogout}
 							disabled={isAuthBusy}
-							className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+							className="nb-btn nb-btn--ghost"
 						>
 							Logout
 						</button>
 					</div>
 				</div>
 
-				<div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
-					<div className="p-6 sm:p-8 space-y-4">
-						<div className="flex items-center justify-between">
-							<h2 className="text-lg font-semibold text-slate-900">Passkeys</h2>
-							<div className="text-sm text-slate-500">
-								Registered: {me.passkeyCount}
-							</div>
+				<div className="nb-card nb-card--blue">
+					<span className="nb-sticker">PASSKEYS</span>
+					<div className="nb-card__header">
+						<h2 className="nb-card__title">Passkeys</h2>
+						<div className="nb-card__meta">Registered: {me.passkeyCount}</div>
+					</div>
+					<button
+						type="button"
+						onClick={handlePasskeyRegister}
+						disabled={isPasskeyBusy}
+						className="nb-btn nb-btn--blue"
+					>
+						Register a Passkey
+					</button>
+				</div>
+
+				<div className="nb-card nb-card--green">
+					<span className="nb-sticker">DEVICES</span>
+					<div className="nb-card__header">
+						<h2 className="nb-card__title">Your devices</h2>
+						<div className="nb-card__meta" aria-hidden="true">
+							⌁ add → wake → boom
 						</div>
-						<button
-							type="button"
-							onClick={handlePasskeyRegister}
-							disabled={isPasskeyBusy}
-							className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-lg shadow-blue-500/30 transition-all"
-						>
-							Register a Passkey
-						</button>
 					</div>
-				</div>
+					<form onSubmit={handleAddDevice} className="nb-form">
+						<input
+							type="text"
+							value={deviceName}
+							onChange={(e) => setDeviceName(e.target.value)}
+							placeholder="Name (optional)"
+							className="nb-input"
+						/>
+						<input
+							type="text"
+							value={deviceMac}
+							onChange={(e) => setDeviceMac(e.target.value.toUpperCase())}
+							placeholder="AA:BB:CC:DD:EE:FF"
+							className="nb-input nb-input--mono"
+							autoComplete="off"
+						/>
+						<button
+							type="submit"
+							disabled={isSubmitting}
+							className="nb-btn nb-btn--black"
+						>
+							Add device
+						</button>
+					</form>
 
-				<div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
-					<div className="p-6 sm:p-8 space-y-4">
-						<h2 className="text-lg font-semibold text-slate-900">Your devices</h2>
-						<form onSubmit={handleAddDevice} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-							<input
-								type="text"
-								value={deviceName}
-								onChange={(e) => setDeviceName(e.target.value)}
-								placeholder="Name (optional)"
-								className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl"
-							/>
-							<input
-								type="text"
-								value={deviceMac}
-								onChange={(e) => setDeviceMac(e.target.value.toUpperCase())}
-								placeholder="AA:BB:CC:DD:EE:FF"
-								className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono"
-								autoComplete="off"
-							/>
-							<button
-								type="submit"
-								disabled={isSubmitting}
-								className="inline-flex items-center justify-center px-6 py-3 rounded-xl text-white bg-slate-900 hover:bg-slate-800"
-							>
-								Add device
-							</button>
-						</form>
-
-						{devices.length === 0 ? (
-							<p className="text-slate-500">No devices yet. Add one above.</p>
-						) : (
-							<div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
-								{devices.map((d) => (
-									<div key={d.id} className="p-4 flex items-center justify-between gap-3">
-										<div className="min-w-0">
-											<div className="font-medium text-slate-900 truncate">{d.name ?? "Unnamed device"}</div>
-											<div className="font-mono text-sm text-slate-600">{d.macAddress}</div>
+					{devices.length === 0 ? (
+						<p style={{ margin: "12px 0 0", opacity: 0.8 }}>
+							No devices yet. Add one above.
+						</p>
+					) : (
+						<div className="nb-list">
+							{devices.map((d) => (
+								<div key={d.id} className="nb-item">
+									<div style={{ minWidth: 0 }}>
+										<div className="nb-item__title" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+											{d.name ?? "Unnamed device"}
 										</div>
-										<div className="flex items-center gap-2">
-											<button
-												type="button"
-												onClick={() => handleWakeDevice(d.id)}
-												disabled={isSubmitting}
-												className="px-4 py-2 rounded-xl text-white bg-blue-600 hover:bg-blue-700"
-											>
-												Wake
-											</button>
-											<button
-												type="button"
-												onClick={() => handleRemoveDevice(d.id)}
-												disabled={isSubmitting}
-												className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-											>
-												Remove
-											</button>
-										</div>
+										<div className="nb-item__sub">{d.macAddress}</div>
 									</div>
-								))}
-							</div>
-						)}
+									<div className="nb-btnrow">
+										<button
+											type="button"
+											onClick={() => handleWakeDevice(d.id)}
+											disabled={isSubmitting}
+											className="nb-btn nb-btn--yellow"
+										>
+											<span aria-hidden="true">
+												<Icons.Zap />
+											</span>
+											Wake
+										</button>
+										<button
+											type="button"
+											onClick={() => handleRemoveDevice(d.id)}
+											disabled={isSubmitting}
+											className="nb-btn nb-btn--ghost"
+										>
+											Remove
+										</button>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
 
-						{error && (
-							<div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center text-red-700 text-sm">
-								<Icons.AlertCircle />
-								<span className="ml-2">{error}</span>
-							</div>
-						)}
-					</div>
+					{error && (
+						<div className="nb-alert nb-alert--error" style={{ marginTop: 12 }}>
+							<Icons.AlertCircle />
+							<div className="nb-alert__text">{error}</div>
+						</div>
+					)}
 				</div>
 
-				<div className="space-y-4">
-					<div className="flex items-center justify-between px-2">
-						<h2 className="text-xl font-semibold text-slate-900">Recent tasks</h2>
-						<button
-							type="button"
-							onClick={fetchTasks}
-							className={`p-2 text-slate-400 hover:text-blue-600 rounded-full hover:bg-blue-50 transition-colors ${
-								isRefreshing ? "animate-spin text-blue-600" : ""
-							}`}
-							title="Refresh tasks"
-						>
-							<Icons.Refresh className="w-5 h-5" />
-						</button>
+				<div className="nb-topbar" style={{ marginTop: 4 }}>
+					<div>
+						<div style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.03em" }}>
+							Recent tasks
+						</div>
+						<div style={{ fontSize: 12, opacity: 0.8 }}>
+							Auto-refreshes every 5s (and you can smack the refresh button).
+						</div>
 					</div>
+					<button type="button" onClick={fetchTasks} className="nb-iconbtn" title="Refresh tasks">
+						<Icons.Refresh className={`w-5 h-5 ${isRefreshing ? "nb-spin" : ""}`} />
+					</button>
+				</div>
 
-					<div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
-						<div className="overflow-x-auto">
-							<table className="min-w-full divide-y divide-slate-100">
-								<thead className="bg-slate-50/50">
-									<tr>
-										<th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-											Device
-										</th>
-										<th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-											Status
-										</th>
-										<th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
-											Last Updated
-										</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-slate-100 bg-white">
-									{tasks.length === 0 ? (
-										<tr>
-											<td colSpan={3} className="px-6 py-12 text-center text-slate-500">
-												No tasks yet.
+				<div className="nb-tablewrap">
+					<table className="nb-table">
+						<thead>
+							<tr>
+								<th style={{ textAlign: "left" }}>Device</th>
+								<th style={{ textAlign: "left" }}>Status</th>
+								<th style={{ textAlign: "right" }}>Last Updated</th>
+							</tr>
+						</thead>
+						<tbody>
+							{tasks.length === 0 ? (
+								<tr>
+									<td colSpan={3} style={{ padding: "22px 16px", textAlign: "center", opacity: 0.8 }}>
+										No tasks yet.
+									</td>
+								</tr>
+							) : (
+								tasks.map((task) => {
+									const statusConfig = getStatusConfig(task.status);
+									const label =
+										task.deviceId && deviceNameById.get(task.deviceId)
+											? deviceNameById.get(task.deviceId)
+											: task.macAddress;
+									return (
+										<tr key={task.id}>
+											<td>
+												<div style={{ fontWeight: 900 }}>{label}</div>
+												<div style={{ fontSize: 12, opacity: 0.78 }}>{task.macAddress}</div>
+											</td>
+											<td>
+												<span className={statusConfig.className}>
+													<span aria-hidden="true">{statusConfig.icon}</span>
+													{statusConfig.label}
+												</span>
+											</td>
+											<td style={{ textAlign: "right", whiteSpace: "nowrap", fontSize: 12, opacity: 0.82 }}>
+												{formatDate(task.updatedAt)}
 											</td>
 										</tr>
-									) : (
-										tasks.map((task) => {
-											const statusConfig = getStatusConfig(task.status);
-											const label =
-												task.deviceId && deviceNameById.get(task.deviceId)
-												? deviceNameById.get(task.deviceId)
-												: task.macAddress;
-											return (
-												<tr key={task.id} className="hover:bg-slate-50/50 transition-colors">
-													<td className="px-6 py-4 whitespace-nowrap">
-														<div className="text-sm font-medium text-slate-700">{label}</div>
-														<div className="font-mono text-xs text-slate-500">{task.macAddress}</div>
-													</td>
-													<td className="px-6 py-4 whitespace-nowrap">
-														<span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${statusConfig.className}`}>
-															<span className="mr-1.5">{statusConfig.icon}</span>
-															{statusConfig.label}
-														</span>
-													</td>
-													<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 text-right">
-														{formatDate(task.updatedAt)}
-													</td>
-												</tr>
-											);
-										})
-									)}
-								</tbody>
-							</table>
-						</div>
-					</div>
+									);
+								})
+							)}
+						</tbody>
+					</table>
 				</div>
 			</div>
 		</div>
