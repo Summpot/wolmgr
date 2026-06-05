@@ -1,20 +1,30 @@
 [package]
 name = "wolmgr-broker-esp32-s3"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 resolver = "2"
 license = "MIT"
-rust-version = "1.82"
-build = "build.rs"
+rust-version = "1.95"
 
 [dependencies]
-anyhow = "1.0.101"
-embedded-svc = "0.29.0"
-esp-idf-svc = "0.52.1"
-esp-idf-sys = { version = "0.37.2", features = ["binstart"] }
-log = "0.4.32"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+embassy-executor = "0.10.0"
+embassy-net = { version = "0.9.1", features = ["dhcpv4", "medium-ethernet", "tcp", "udp", "dns"] }
+embassy-time = "0.5.0"
+esp-alloc = { version = "0.10.0", features = ["esp32s3"] }
+esp-backtrace = { version = "0.19.0", features = ["esp32s3", "panic-handler", "println"] }
+esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3"] }
+esp-hal = { version = "1.1.1", features = ["esp32s3", "log-04", "unstable"] }
+esp-println = { version = "0.17.0", features = ["esp32s3", "log-04"] }
+esp-radio = { version = "1.0.0-beta.0", features = ["esp32s3", "log-04", "wifi"] }
+esp-rtos = { version = "0.3.0", features = ["esp32s3", "embassy", "esp-radio", "log-04"] }
+heapless = { version = "0.9.2", features = ["serde"] }
+rust-mqtt = { version = "0.5.1", default-features = false, features = ["alloc", "v5", "log"] }
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
+serde-json-core = "0.6.0"
+static_cell = "2.1.1"
 
-[build-dependencies]
-embuild = "0.33.1"
+[profile.release]
+debug = true
+debug-assertions = true
+lto = "fat"
+codegen-units = 1

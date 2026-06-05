@@ -1,23 +1,24 @@
 # ESP32-S3 WOL broker
 
-This firmware connects an ESP32-S3 to Wi-Fi, polls the Rust backend for pending Wake-on-LAN tasks, sends WOL magic packets on the LAN, and reports task status back to the backend.
+This firmware uses `esp-rs/esp-hal` with Embassy networking. It connects to Wi-Fi, subscribes to MQTT WOL commands, sends Wake-on-LAN magic packets on the LAN, and publishes task status back to MQTT.
 
 ## Build
 
-Install the esp-rs toolchain and `cargo-espflash`, then build/flash with:
+Install the esp-rs Xtensa toolchain and `cargo-espflash`, then build/flash with:
 
 ```bash
-cd broker/esp32-s3
 WIFI_SSID="your-ssid" \
 WIFI_PASS="your-password" \
-WOLMGR_API_BASE_URL="http://192.168.1.10:8787" \
-BROKER_API_TOKEN="same-as-backend-token" \
-MCU=esp32s3 \
+MQTT_HOST="192.168.1.10" \
+MQTT_PORT="1883" \
+MQTT_TOPIC_PREFIX="wolmgr/wol" \
 cargo espflash flash --release --monitor
 ```
 
 Optional compile-time settings:
 
-- `POLL_INTERVAL_MS` defaults to `10000`.
+- `MQTT_USERNAME` and `MQTT_PASSWORD` authenticate to the MQTT broker.
+- `MQTT_CLIENT_ID` defaults to `wolmgr-esp32s3`.
+- `MQTT_KEEPALIVE_SECS` defaults to `30`.
 - `WOL_BROADCAST_ADDR` defaults to `255.255.255.255`.
 - `WOL_PORT` defaults to `9`.

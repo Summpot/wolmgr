@@ -1,33 +1,41 @@
-use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration as StdDuration};
 
 use anyhow::{Context, Result};
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::{IntoResponse, Redirect, Response},
+    http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{delete, get, post},
 };
 use cookie::{Cookie, SameSite};
 use nanoid::nanoid;
 use reqwest::Client as HttpClient;
+use rumqttc::{AsyncClient as MqttAsyncClient, Event, Incoming, MqttOptions, QoS, Transport};
+use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
-use time::{Duration, OffsetDateTime};
+use time::{Duration as TimeDuration, OffsetDateTime};
 use toasty::{Db, Executor, sql, stmt::Value};
 use tower_http::{
     cors::{Any, CorsLayer},
-    services::ServeDir,
     trace::TraceLayer,
 };
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 const SESSION_COOKIE_NAME: &str = "wolmgr_session";
 const SESSION_TTL_MS: i64 = 1000 * 60 * 60 * 24 * 30;
+const INDEX_HTML: &str = "index.html";
+
+#[derive(RustEmbed)]
+#[folder = "../frontend/dist/"]
+#[allow_missing = true]
+struct FrontendAssets;
 
 #[derive(Clone)]
 struct AppState {
     db: Db,
     http: HttpClient,
+    mqtt: MqttPublisher,
     config: Arc<AppConfig>,
 }
 
@@ -36,8 +44,22 @@ struct AppConfig {
     public_origin: String,
     github_client_id: Option<String>,
     github_client_secret: Option<String>,
-    broker_api_token: Option<String>,
     cookie_secure: bool,
+}
+
+#[derive(Clone)]
+struct MqttPublisher {
+    client: MqttAsyncClient,
+    command_topic: String,
+}
+
+#[derive(Debug, Clone)]
+struct MqttConfig {
+    url: String,
+    username: Option<String>,
+    password: Option<String>,
+    client_id: String,
+    topic_prefix: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -97,18 +119,18 @@ struct CreateTaskRequest {
     mac_address: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UpdateTaskRequest {
+struct WolCommand {
     id: String,
-    status: String,
+    mac_address: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct NotifyTaskRequest {
-    id: Option<String>,
-    mac_address: Option<String>,
+struct WolStatusUpdate {
+    id: String,
+    status: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -156,7 +178,6 @@ async fn main() -> Result<()> {
 
     let database_url =
         env_optional("DATABASE_URL").unwrap_or_else(|| "sqlite:./wolmgr.sqlite3".to_string());
-    let static_dir = env_optional("STATIC_DIR").map(PathBuf::from);
     let bind_addr: SocketAddr = env_optional("BIND_ADDR")
         .unwrap_or_else(|| "127.0.0.1:8787".to_string())
         .parse()
@@ -176,28 +197,27 @@ async fn main() -> Result<()> {
         public_origin,
         github_client_id: env_optional("GITHUB_CLIENT_ID"),
         github_client_secret: env_optional("GITHUB_CLIENT_SECRET"),
-        broker_api_token: env_optional("BROKER_API_TOKEN"),
     };
+    let mqtt_config = MqttConfig::from_env()?;
+    let mqtt = setup_mqtt(&db, &mqtt_config).await?;
 
     let state = AppState {
         db,
         http: HttpClient::new(),
+        mqtt,
         config: Arc::new(config),
     };
 
-    let api = api_router().with_state(state);
-    let app = if let Some(static_dir) = static_dir {
-        api.fallback_service(ServeDir::new(static_dir))
-    } else {
-        api
-    }
-    .layer(TraceLayer::new_for_http())
-    .layer(
-        CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-    );
+    let app = api_router()
+        .with_state(state)
+        .fallback(embedded_static)
+        .layer(TraceLayer::new_for_http())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        );
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(%bind_addr, "wolmgr backend listening");
@@ -222,12 +242,193 @@ fn api_router() -> Router<AppState> {
         .route("/api/devices", get(list_devices).post(add_device))
         .route("/api/devices/{device_id}", delete(delete_device))
         .route("/api/devices/{device_id}/wake", post(wake_device))
-        .route(
-            "/api/wol/tasks",
-            get(list_tasks).post(create_task).put(update_task),
+        .route("/api/wol/tasks", get(list_tasks).post(create_task))
+}
+
+impl MqttConfig {
+    fn from_env() -> Result<Self> {
+        Ok(Self {
+            url: env_optional("MQTT_URL").unwrap_or_else(|| "mqtt://127.0.0.1:1883".to_string()),
+            username: env_optional("MQTT_USERNAME"),
+            password: env_optional("MQTT_PASSWORD"),
+            client_id: env_optional("MQTT_CLIENT_ID")
+                .unwrap_or_else(|| format!("wolmgr-backend-{}", nanoid!(8))),
+            topic_prefix: env_optional("MQTT_TOPIC_PREFIX")
+                .unwrap_or_else(|| "wolmgr/wol".to_string())
+                .trim_matches('/')
+                .to_string(),
+        })
+    }
+
+    fn command_topic(&self) -> String {
+        format!("{}/commands", self.topic_prefix)
+    }
+
+    fn status_topic(&self) -> String {
+        format!("{}/status", self.topic_prefix)
+    }
+}
+
+async fn setup_mqtt(db: &Db, config: &MqttConfig) -> Result<MqttPublisher> {
+    let command_topic = config.command_topic();
+    let status_topic = config.status_topic();
+    let options = mqtt_options(config)?;
+    let (client, eventloop) = MqttAsyncClient::new(options, 32);
+
+    client
+        .subscribe(status_topic.clone(), QoS::AtLeastOnce)
+        .await
+        .context("failed to enqueue MQTT status subscription")?;
+
+    tokio::spawn(mqtt_event_loop(db.clone(), eventloop, status_topic.clone()));
+    tracing::info!(
+        mqtt_url = %config.url,
+        command_topic = %command_topic,
+        status_topic = %status_topic,
+        "MQTT bridge configured"
+    );
+
+    Ok(MqttPublisher {
+        client,
+        command_topic,
+    })
+}
+
+fn mqtt_options(config: &MqttConfig) -> Result<MqttOptions> {
+    let parsed = url::Url::parse(&config.url).context("invalid MQTT_URL")?;
+    let scheme = parsed.scheme();
+    let host = parsed
+        .host_str()
+        .context("MQTT_URL must include a host")?
+        .to_string();
+    let default_port = match scheme {
+        "mqtt" | "tcp" => 1883,
+        "mqtts" | "ssl" => 8883,
+        other => anyhow::bail!("unsupported MQTT_URL scheme: {other}"),
+    };
+    let mut options = MqttOptions::new(
+        config.client_id.clone(),
+        host,
+        parsed.port().unwrap_or(default_port),
+    );
+    options.set_keep_alive(StdDuration::from_secs(30));
+
+    if matches!(scheme, "mqtts" | "ssl") {
+        options.set_transport(Transport::tls_with_default_config());
+    }
+
+    let username = config
+        .username
+        .clone()
+        .or_else(|| (!parsed.username().is_empty()).then(|| parsed.username().to_string()));
+    let password = config
+        .password
+        .clone()
+        .or_else(|| parsed.password().map(ToOwned::to_owned));
+    if let Some(username) = username {
+        options.set_credentials(username, password.unwrap_or_default());
+    }
+
+    Ok(options)
+}
+
+async fn mqtt_event_loop(db: Db, mut eventloop: rumqttc::EventLoop, status_topic: String) {
+    loop {
+        match eventloop.poll().await {
+            Ok(Event::Incoming(Incoming::Publish(publish))) if publish.topic == status_topic => {
+                if let Err(err) = handle_mqtt_status(&db, &publish.payload).await {
+                    tracing::warn!(error = ?err, "failed to process MQTT status update");
+                }
+            }
+            Ok(Event::Incoming(Incoming::ConnAck(_))) => {
+                tracing::info!("MQTT bridge connected");
+            }
+            Ok(_) => {}
+            Err(err) => {
+                tracing::warn!(error = ?err, "MQTT bridge disconnected; retrying");
+                tokio::time::sleep(StdDuration::from_secs(2)).await;
+            }
+        }
+    }
+}
+
+async fn handle_mqtt_status(db: &Db, payload: &[u8]) -> Result<()> {
+    let update: WolStatusUpdate =
+        serde_json::from_slice(payload).context("failed to decode MQTT status payload")?;
+    let task = update_task_status(db, &update.id, &update.status)
+        .await
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    tracing::info!(
+        task_id = %task.id,
+        mac_address = %task.mac_address,
+        status = %task.status,
+        "WOL task status updated from MQTT"
+    );
+    Ok(())
+}
+
+async fn publish_wol_command(state: &AppState, task: &WolTask) -> Result<(), AppError> {
+    let command = WolCommand {
+        id: task.id.clone(),
+        mac_address: task.mac_address.clone(),
+    };
+    let payload = serde_json::to_vec(&command)
+        .context("failed to encode MQTT WOL command")
+        .map_err(AppError::Internal)?;
+    state
+        .mqtt
+        .client
+        .publish(
+            state.mqtt.command_topic.clone(),
+            QoS::AtLeastOnce,
+            false,
+            payload,
         )
-        .route("/api/wol/tasks/pending", get(pending_tasks))
-        .route("/api/wol/tasks/notify", post(notify_task))
+        .await
+        .context("failed to publish MQTT WOL command")
+        .map_err(AppError::Internal)
+}
+
+async fn embedded_static(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+
+    if path.starts_with("api/") {
+        return not_found().await;
+    }
+
+    if path.is_empty() || path == INDEX_HTML {
+        return index_html().await;
+    }
+
+    match FrontendAssets::get(path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            ([(header::CONTENT_TYPE, mime.as_ref())], content.data).into_response()
+        }
+        None if path.contains('.') => not_found().await,
+        None => index_html().await,
+    }
+}
+
+async fn index_html() -> Response {
+    match FrontendAssets::get(INDEX_HTML) {
+        Some(content) => Html(content.data).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            "frontend assets are not embedded; run pnpm build:frontend before building the backend",
+        )
+            .into_response(),
+    }
+}
+
+async fn not_found() -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ErrorBody {
+            error: "Not found".to_string(),
+        }),
+    )
+        .into_response()
 }
 
 async fn health() -> Json<serde_json::Value> {
@@ -506,6 +707,7 @@ async fn wake_device(
         Some(&device.id),
     )
     .await?;
+    publish_wol_command(&state, &task).await?;
     Ok(Json(serde_json::json!({ "task": task })))
 }
 
@@ -525,49 +727,7 @@ async fn create_task(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = require_user(&state, &headers).await?;
     let task = insert_task(&state.db, &input.mac_address, Some(&user.id), None).await?;
-    Ok(Json(serde_json::json!({ "task": task })))
-}
-
-async fn pending_tasks(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, AppError> {
-    require_broker(&state, &headers)?;
-    let rows = select_rows(
-        &state.db,
-        sql::query("SELECT id, mac_address FROM wol_tasks WHERE status = 'pending' ORDER BY created_at DESC LIMIT 200")
-            .column_types([toasty::stmt::Type::String, toasty::stmt::Type::String]),
-    )
-    .await?;
-    let tasks: Vec<_> = rows
-        .iter()
-        .map(|row| {
-            serde_json::json!({
-                "id": value_to_string(row.get(0)).unwrap_or_default(),
-                "macAddress": value_to_string(row.get(1)).unwrap_or_default().to_uppercase(),
-            })
-        })
-        .collect();
-    Ok(Json(serde_json::json!({ "tasks": tasks })))
-}
-
-async fn update_task(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<UpdateTaskRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    require_broker(&state, &headers)?;
-    let task = update_task_status(&state.db, &input.id, &input.status).await?;
-    Ok(Json(serde_json::json!({ "task": task })))
-}
-
-async fn notify_task(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<NotifyTaskRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    require_broker(&state, &headers)?;
-    let task = notify_success(&state.db, input).await?;
+    publish_wol_command(&state, &task).await?;
     Ok(Json(serde_json::json!({ "task": task })))
 }
 
@@ -692,21 +852,6 @@ async fn require_user(state: &AppState, headers: &HeaderMap) -> Result<User, App
     get_user_from_session(&state.db, headers)
         .await?
         .ok_or(AppError::Unauthorized)
-}
-
-fn require_broker(state: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
-    let Some(token) = &state.config.broker_api_token else {
-        return Ok(());
-    };
-    let auth = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
-    if auth == format!("Bearer {token}") {
-        Ok(())
-    } else {
-        Err(AppError::Unauthorized)
-    }
 }
 
 async fn count_passkeys(db: &Db, user_id: &str) -> Result<i64, AppError> {
@@ -930,45 +1075,6 @@ async fn update_task_status(db: &Db, id: &str, status: &str) -> Result<WolTask, 
         .map_err(AppError::from)
 }
 
-async fn notify_success(db: &Db, input: NotifyTaskRequest) -> Result<WolTask, AppError> {
-    let task = if let Some(id) = input.id.filter(|id| !id.trim().is_empty()) {
-        get_task_by_id(db, &id).await?
-    } else if let Some(mac) = input.mac_address {
-        let mac = normalize_mac_address(&mac)?;
-        let row = select_one(
-            db,
-            sql::query(
-                "SELECT id, mac_address, status, created_at, updated_at, attempts, user_id, device_id
-                 FROM wol_tasks
-                 WHERE mac_address = ?1
-                 ORDER BY created_at DESC
-                 LIMIT 1",
-            )
-            .bind(mac)
-            .column_types(task_column_types()),
-        )
-        .await?;
-        row.as_ref().map(|row| map_task_row(row))
-    } else {
-        None
-    };
-    let task = task.ok_or_else(|| AppError::NotFound("Task not found".to_string()))?;
-    if task.status == "success" {
-        return Ok(task);
-    }
-    exec_statement(
-        db,
-        sql::statement("UPDATE wol_tasks SET status = 'success', updated_at = ?1 WHERE id = ?2")
-            .bind(now_ms())
-            .bind(task.id.clone()),
-    )
-    .await?;
-    get_task_by_id(db, &task.id)
-        .await?
-        .context("failed to load notified task")
-        .map_err(AppError::from)
-}
-
 async fn exec_statement(db: &Db, statement: sql::Statement) -> Result<u64, AppError> {
     let mut db = db.clone();
     statement
@@ -1110,7 +1216,7 @@ fn session_cookie(
         .same_site(SameSite::Lax)
         .secure(config.cookie_secure);
     if let Some(max_age_seconds) = max_age_seconds {
-        cookie = cookie.max_age(Duration::seconds(max_age_seconds));
+        cookie = cookie.max_age(TimeDuration::seconds(max_age_seconds));
     }
     HeaderValue::from_str(&cookie.build().to_string()).map_err(|err| AppError::Internal(err.into()))
 }
@@ -1121,7 +1227,7 @@ fn expire_session_cookie(config: &AppConfig) -> Result<HeaderValue, AppError> {
         .http_only(true)
         .same_site(SameSite::Lax)
         .secure(config.cookie_secure)
-        .max_age(Duration::seconds(0))
+        .max_age(TimeDuration::seconds(0))
         .expires(OffsetDateTime::UNIX_EPOCH)
         .build()
         .to_string();

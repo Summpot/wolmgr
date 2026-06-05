@@ -4,10 +4,11 @@ wolmgr is a Wake-on-LAN manager with a separated React frontend, a Rust backend,
 
 ## Architecture
 
-- **Frontend:** React + Rsbuild in `frontend/`. It calls the REST API and polls recent tasks.
-- **Backend:** Axum + Toasty in `backend/`. It owns authentication/session state, devices, WOL task rows, and broker endpoints.
+- **Frontend:** React + Rsbuild in `frontend/`. Production assets are embedded into the Rust backend binary.
+- **Backend:** Axum + Toasty in `backend/`. It owns authentication/session state, devices, WOL task rows, and the MQTT bridge.
 - **Database:** Toasty with the SQLite driver by default. Set `DATABASE_URL`, for example `sqlite:./wolmgr.sqlite3`.
-- **Broker:** ESP32-S3 Rust firmware in `broker/esp32-s3/`. It connects to Wi-Fi, polls pending tasks, sends UDP WOL packets, and updates task status.
+- **MQTT:** The backend publishes WOL commands and subscribes to broker status updates.
+- **Broker:** ESP32-S3 Rust firmware in `broker/esp32-s3/`. It uses `esp-rs/esp-hal`, connects to Wi-Fi, subscribes to MQTT commands, sends UDP WOL packets, and publishes task status.
 
 ## REST API
 
@@ -20,11 +21,17 @@ wolmgr is a Wake-on-LAN manager with a separated React frontend, a Rust backend,
 | `POST` | `/api/devices/{id}/wake` | Queues a WOL task for a saved device. |
 | `GET` | `/api/wol/tasks` | Lists signed-in user's recent WOL tasks. |
 | `POST` | `/api/wol/tasks` | Queues a WOL task by MAC address. |
-| `GET` | `/api/wol/tasks/pending` | Broker endpoint: returns pending tasks. |
-| `PUT` | `/api/wol/tasks` | Broker endpoint: updates task status. |
-| `POST` | `/api/wol/tasks/notify` | Broker endpoint: marks a task success by `id` or `macAddress`. |
 
-Broker endpoints accept `Authorization: Bearer <BROKER_API_TOKEN>` when `BROKER_API_TOKEN` is set on the backend.
+## MQTT Protocol
+
+Default topic prefix: `wolmgr/wol`.
+
+| Topic | Direction | Payload |
+| --- | --- | --- |
+| `wolmgr/wol/commands` | Backend -> ESP32-S3 broker | `{ "id": "task-id", "macAddress": "AA:BB:CC:DD:EE:FF" }` |
+| `wolmgr/wol/status` | ESP32-S3 broker -> backend | `{ "id": "task-id", "status": "processing" }` |
+
+Status values are `processing`, `success`, or `failed`. The backend also stores newly queued tasks as `pending`.
 
 ## Local Development
 
@@ -47,9 +54,10 @@ To serve the built frontend from the Rust backend:
 
 ```bash
 pnpm build:frontend
-$env:STATIC_DIR="frontend/dist"
 cargo run -p wolmgr-backend
 ```
+
+The backend embeds `frontend/dist` at compile time. Rebuild the frontend before building/running the backend when frontend assets change.
 
 ## Environment
 
@@ -58,9 +66,11 @@ Backend variables:
 - `DATABASE_URL` defaults to `sqlite:./wolmgr.sqlite3`.
 - `BIND_ADDR` defaults to `127.0.0.1:8787`.
 - `PUBLIC_ORIGIN` is used for OAuth callback URLs and secure cookie detection.
-- `STATIC_DIR` optionally serves frontend static files from the backend.
+- `MQTT_URL` defaults to `mqtt://127.0.0.1:1883`.
+- `MQTT_USERNAME` and `MQTT_PASSWORD` optionally authenticate to the MQTT broker.
+- `MQTT_CLIENT_ID` defaults to a generated backend client ID.
+- `MQTT_TOPIC_PREFIX` defaults to `wolmgr/wol`.
 - `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` enable GitHub OAuth.
-- `BROKER_API_TOKEN` protects broker automation endpoints.
 
 Frontend variable:
 
@@ -68,21 +78,24 @@ Frontend variable:
 
 ## ESP32-S3 Broker
 
-The broker lives in `broker/esp32-s3` and is intentionally excluded from the root Cargo workspace because it targets `xtensa-esp32s3-espidf`.
+The broker lives in `broker/esp32-s3` and is intentionally excluded from the root Cargo workspace because it targets `xtensa-esp32s3-none-elf`.
 
 ```bash
 cd broker/esp32-s3
 WIFI_SSID="your-ssid" \
 WIFI_PASS="your-password" \
-WOLMGR_API_BASE_URL="http://192.168.1.10:8787" \
-BROKER_API_TOKEN="same-as-backend-token" \
-MCU=esp32s3 \
+MQTT_HOST="192.168.1.10" \
+MQTT_PORT="1883" \
+MQTT_USERNAME="" \
+MQTT_PASSWORD="" \
+MQTT_TOPIC_PREFIX="wolmgr/wol" \
 cargo espflash flash --release --monitor
 ```
 
 Optional broker compile-time variables:
 
-- `POLL_INTERVAL_MS` defaults to `10000`.
+- `MQTT_CLIENT_ID` defaults to `wolmgr-esp32s3`.
+- `MQTT_KEEPALIVE_SECS` defaults to `30`.
 - `WOL_BROADCAST_ADDR` defaults to `255.255.255.255`.
 - `WOL_PORT` defaults to `9`.
 
@@ -92,11 +105,11 @@ Optional broker compile-time variables:
 docker build -t wolmgr .
 docker run --rm -p 8787:8787 -v wolmgr-data:/data \
   -e PUBLIC_ORIGIN=http://localhost:8787 \
-  -e BROKER_API_TOKEN=change-me \
+  -e MQTT_URL=mqtt://host.docker.internal:1883 \
   wolmgr
 ```
 
 ## Current Notes
 
 - Passkey routes are preserved but return `501` in the Rust backend until WebAuthn is migrated from the old TypeScript implementation.
-- GitHub OAuth, sessions, devices, WOL task queueing, and broker polling/status updates are implemented in Rust.
+- GitHub OAuth, sessions, devices, WOL task queueing, and MQTT status updates are implemented in Rust.
