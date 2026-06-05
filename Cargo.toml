@@ -1,0 +1,9 @@
+[workspace]
+members = ["backend"]
+exclude = ["broker/esp32-s3"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.95"

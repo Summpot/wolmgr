@@ -1,0 +1,20 @@
+[package]
+name = "wolmgr-broker-esp32-s3"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+license = "MIT"
+rust-version = "1.82"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1.0.101"
+embedded-svc = "0.29.0"
+esp-idf-svc = "0.52.1"
+esp-idf-sys = { version = "0.37.2", features = ["binstart"] }
+log = "0.4.32"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+
+[build-dependencies]
+embuild = "0.33.1"

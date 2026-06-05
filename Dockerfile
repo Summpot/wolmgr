@@ -1,41 +1,40 @@
 # syntax=docker/dockerfile:1
 
-# Build stage: use the existing pnpm + rslib pipeline to produce a bundled waker.
-FROM node:22-alpine AS builder
-
+FROM node:22-bookworm-slim AS frontend-builder
 WORKDIR /app
-
-# pnpm via Corepack (matches package.json "packageManager")
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml ./
-COPY tsconfig.json rslib.config.ts rsbuild.config.ts biome.json postcss.config.mjs ./
-COPY public ./public
-COPY src ./src
-
-RUN corepack prepare pnpm@10.26.2 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY frontend/package.json ./frontend/package.json
+RUN corepack prepare pnpm@10.28.2 --activate
 RUN pnpm install --frozen-lockfile
 
-# rslib builds dist/waker.js (and dist/_worker.js for Pages)
-RUN pnpm -s build:worker
+COPY frontend ./frontend
+RUN pnpm -s build:frontend
 
-
-# Runtime stage: bun executes the bundled script.
-FROM oven/bun:alpine AS runtime
-
+FROM rust:1.95-bookworm AS backend-builder
 WORKDIR /app
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends pkg-config libsqlite3-dev \
+	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/dist/waker.js ./waker.js
+COPY Cargo.toml Cargo.lock ./
+COPY backend ./backend
+RUN cargo build -p wolmgr-backend --release
 
-# Required:
-# - TURSO_DATABASE_URL
-# - TURSO_AUTH_TOKEN
-# Optional:
-# - POLL_INTERVAL_MS (default 10000)
-# - WOL_BROADCAST_ADDR (default 255.255.255.255)
-# - WOL_PORT (default 9)
-# - ROUTEROS_ENABLED (true/false)
-# - ROUTEROS_HOST / ROUTEROS_USER / ROUTEROS_PASSWORD / ROUTEROS_PORT / ROUTEROS_TLS
-# - ROUTEROS_WOL_INTERFACE
+FROM debian:bookworm-slim AS runtime
+WORKDIR /app
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
+	&& rm -rf /var/lib/apt/lists/*
 
-CMD ["bun", "./waker.js"]
+COPY --from=backend-builder /app/target/release/wolmgr-backend /usr/local/bin/wolmgr-backend
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+ENV BIND_ADDR=0.0.0.0:8787
+ENV DATABASE_URL=sqlite:/data/wolmgr.sqlite3
+ENV STATIC_DIR=/app/frontend/dist
+VOLUME ["/data"]
+EXPOSE 8787
+
+CMD ["wolmgr-backend"]

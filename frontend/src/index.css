@@ -23,8 +23,9 @@
 		--nb-focus: 0 0 0 4px var(--nb-yellow);
 		--nb-speed: 160ms;
 		--nb-ease: cubic-bezier(0.2, 0.9, 0.2, 1);
-		--nb-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-			"Liberation Mono", "Courier New", monospace;
+		--nb-font:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+			"Courier New", monospace;
 		color-scheme: light;
 	}
 
@@ -45,7 +46,10 @@
 				rgba(16, 16, 16, 0.045) 0 1px,
 				transparent 1px 14px
 			);
-		background-size: 16px 16px, auto, auto;
+		background-size:
+			16px 16px,
+			auto,
+			auto;
 		background-attachment: fixed;
 		text-rendering: geometricPrecision;
 		-webkit-font-smoothing: antialiased;
@@ -133,7 +137,8 @@
 	background: var(--nb-paper);
 	box-shadow: var(--nb-shadow);
 	padding: clamp(16px, 2.2vw, 24px);
-	transition: transform var(--nb-speed) var(--nb-ease),
+	transition:
+		transform var(--nb-speed) var(--nb-ease),
 		box-shadow var(--nb-speed) var(--nb-ease);
 }
 
@@ -227,13 +232,16 @@
 	border-radius: var(--nb-radius-sm);
 	background: #fff;
 	box-shadow: 4px 4px 0 0 var(--nb-ink);
-	transition: transform var(--nb-speed) var(--nb-ease),
+	transition:
+		transform var(--nb-speed) var(--nb-ease),
 		box-shadow var(--nb-speed) var(--nb-ease);
 }
 
 .nb-input:focus {
 	outline: none;
-	box-shadow: 4px 4px 0 0 var(--nb-ink), var(--nb-focus);
+	box-shadow:
+		4px 4px 0 0 var(--nb-ink),
+		var(--nb-focus);
 }
 
 .nb-input--mono {
@@ -254,7 +262,8 @@
 	letter-spacing: 0.01em;
 	background: #fff;
 	box-shadow: 6px 6px 0 0 var(--nb-ink);
-	transition: transform var(--nb-speed) var(--nb-ease),
+	transition:
+		transform var(--nb-speed) var(--nb-ease),
 		box-shadow var(--nb-speed) var(--nb-ease);
 	user-select: none;
 }
@@ -277,7 +286,9 @@
 
 .nb-btn:focus-visible {
 	outline: none;
-	box-shadow: 6px 6px 0 0 var(--nb-ink), var(--nb-focus);
+	box-shadow:
+		6px 6px 0 0 var(--nb-ink),
+		var(--nb-focus);
 }
 
 .nb-btn--black {
@@ -325,7 +336,8 @@
 	border-radius: var(--nb-radius-sm);
 	background: #fff;
 	box-shadow: 5px 5px 0 0 var(--nb-ink);
-	transition: transform var(--nb-speed) var(--nb-ease),
+	transition:
+		transform var(--nb-speed) var(--nb-ease),
 		box-shadow var(--nb-speed) var(--nb-ease);
 }
 
@@ -450,7 +462,8 @@
 	border-radius: 999px;
 	background: #fff;
 	box-shadow: 6px 6px 0 0 var(--nb-ink);
-	transition: transform var(--nb-speed) var(--nb-ease),
+	transition:
+		transform var(--nb-speed) var(--nb-ease),
 		box-shadow var(--nb-speed) var(--nb-ease);
 }
 

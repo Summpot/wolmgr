@@ -1,0 +1,25 @@
+{
+	"name": "@wolmgr/frontend",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "rsbuild dev",
+		"build": "rsbuild build"
+	},
+	"dependencies": {
+		"@simplewebauthn/browser": "^13.2.2",
+		"react": "^19.0.4",
+		"react-dom": "^19.0.4"
+	},
+	"devDependencies": {
+		"@rsbuild/core": "^1.7.3",
+		"@rsbuild/plugin-react": "^1.4.5",
+		"@tailwindcss/postcss": "^4.1.18",
+		"@types/react": "^19.2.13",
+		"@types/react-dom": "^19.2.3",
+		"autoprefixer": "^10.4.24",
+		"postcss": "^8.5.6",
+		"tailwindcss": "^4.1.18",
+		"typescript": "5.9.3"
+	}
+}

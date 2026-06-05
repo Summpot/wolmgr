@@ -1,103 +1,102 @@
 # wolmgr
 
-wolmgr tracks wake-on-LAN requests, stores every task row in **Turso (libSQL)**, and exposes a simple REST API so both the browser UI and automations can work from the same data.
+wolmgr is a Wake-on-LAN manager with a separated React frontend, a Rust backend, and a Rust ESP32-S3 broker that sends WOL magic packets inside your LAN.
 
 ## Architecture
 
-- **React + polling UI:** the front-end polls `/api/wol/tasks` every few seconds to keep the task table fresh and calls the REST API to enqueue new wake requests.
-- **Cloudflare Worker + Turso:** `_worker.ts` creates the `wol_tasks` table in Turso on first request, persists every change, and exposes endpoints that let UI (and optional RouterOS scripts) manage tasks.
-- **bun waker (Docker):** `src/waker.ts` runs outside of Workers and polls Turso **every 10 seconds**, claims pending tasks, and sends WOL broadcasts directly. If RouterOS env vars are configured, it uses RouterOS API to proxy the WOL send.
+- **Frontend:** React + Rsbuild in `frontend/`. It calls the REST API and polls recent tasks.
+- **Backend:** Axum + Toasty in `backend/`. It owns authentication/session state, devices, WOL task rows, and broker endpoints.
+- **Database:** Toasty with the SQLite driver by default. Set `DATABASE_URL`, for example `sqlite:./wolmgr.sqlite3`.
+- **Broker:** ESP32-S3 Rust firmware in `broker/esp32-s3/`. It connects to Wi-Fi, polls pending tasks, sends UDP WOL packets, and updates task status.
 
 ## REST API
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/wol/tasks` | Returns **all** tasks (used by the UI). |
-| `POST` | `/api/wol/tasks` | Create a new task. Body: `{ "macAddress": "AA:BB:CC:DD:EE:FF" }`. |
-| `PUT` | `/api/wol/tasks` | Update task status. Body: `{ "id": "abc", "status": "processing" }`. |
-| `GET` | `/api/wol/tasks/pending` | Returns only pending tasks (used by RouterOS). |
-| `POST` | `/api/wol/tasks/notify` | Mark the matching task (by `id` or `macAddress`) as `success` once the router sees it in the ARP table. |
+| `GET` | `/api/me` | Returns current session user and passkey count. |
+| `GET` | `/api/devices` | Lists signed-in user's devices. |
+| `POST` | `/api/devices` | Adds a device. Body: `{ "name": "NAS", "macAddress": "AA:BB:CC:DD:EE:FF" }`. |
+| `DELETE` | `/api/devices/{id}` | Deletes a device. |
+| `POST` | `/api/devices/{id}/wake` | Queues a WOL task for a saved device. |
+| `GET` | `/api/wol/tasks` | Lists signed-in user's recent WOL tasks. |
+| `POST` | `/api/wol/tasks` | Queues a WOL task by MAC address. |
+| `GET` | `/api/wol/tasks/pending` | Broker endpoint: returns pending tasks. |
+| `PUT` | `/api/wol/tasks` | Broker endpoint: updates task status. |
+| `POST` | `/api/wol/tasks/notify` | Broker endpoint: marks a task success by `id` or `macAddress`. |
 
-All responses are JSON. Success responses return the affected `task` or `tasks` array, and failures return `{ "error": "..." }` with an appropriate HTTP status.
+Broker endpoints accept `Authorization: Bearer <BROKER_API_TOKEN>` when `BROKER_API_TOKEN` is set on the backend.
 
-## RouterOS script (optional)
-
-1. Copy `wol-routeros-script.rsc` onto the router and update the placeholder URLs at the top with your deployed worker (e.g., `https://your-namespace.pages.dev/api/wol/tasks`).
-2. Adjust the polling interval (`INTERVAL`) as needed.
-3. The script:
-   - Fetches pending tasks from `/api/wol/tasks/pending`.
-   - Sends the WOL packet for each MAC address.
-   - Updates the task status to `processing` while waiting for the device to appear.
-   - Watches `/ip arp` and calls `/api/wol/tasks/notify` immediately when the MAC is seen.
-   - Falls back to a ping verification and marks the task `success`/`failed` if the ARP entry never appears.
-4. Install the script in the scheduler and keep it running.
-
-## Turso setup
-
-1. Create a Turso database (or let CI create it for you).
-2. Configure the Cloudflare Pages project with:
-   - `TURSO_DATABASE_URL` (recommended: the **HTTP** URL, e.g. `https://<db>-<org>.turso.io`)
-   - `TURSO_AUTH_TOKEN` (database auth token / JWT)
-3. The worker auto-creates the `wol_tasks` table on first run, so no manual migrations are needed.
-
-## CI/CD (GitHub Actions)
-
-This repo includes a deploy workflow at `.github/workflows/deploy-cloudflare.yml` that:
-
-- Ensures the Pages project exists.
-- Ensures a Turso database exists (creates it if missing) using the **Turso Platform API**.
-- Generates a fresh database auth token and configures the Pages project secrets.
-- Builds and deploys the Pages project.
-
-Required GitHub repository secrets:
-
-- `CLOUDFLARE_API_TOKEN` (API token with permissions for Cloudflare Pages)
-- `CLOUDFLARE_ACCOUNT_ID`
-
-Turso secrets:
-
-- `TURSO_PLATFORM_API_TOKEN` (Platform API token)
-- `TURSO_ORG_SLUG` (your org/user slug)
-- `TURSO_DB_NAME` (e.g. `wolmgr`)
-- `TURSO_GROUP` (optional; defaults to `default`)
-
-## Local workflow
+## Local Development
 
 ```bash
-pnpm install        # install dependencies
-pnpm build          # bundle the UI + worker
-npx wrangler dev     # preview locally (Pages + Workers enabled)
-npx wrangler deploy  # push to production
+pnpm install
+cargo check -p wolmgr-backend
+
+# Terminal 1
+$env:DATABASE_URL="sqlite:./wolmgr.sqlite3"
+$env:BIND_ADDR="127.0.0.1:8787"
+cargo run -p wolmgr-backend
+
+# Terminal 2
+pnpm dev:frontend
 ```
 
-## bun waker (Docker)
+The frontend dev server proxies `/api` to `http://127.0.0.1:8787`.
 
-The Docker image runs the bundled `waker` with bun, and **talks to Turso directly** (it does not call the Worker API).
-
-Environment variables (minimum):
-
-- `TURSO_DATABASE_URL`
-- `TURSO_AUTH_TOKEN`
-
-Optional RouterOS proxy:
-
-- `ROUTEROS_ENABLED=true`
-- `ROUTEROS_HOST`, `ROUTEROS_USER`, `ROUTEROS_PASSWORD`
-- `ROUTEROS_PORT` (default `8728`), `ROUTEROS_TLS` (default `false`)
-- `ROUTEROS_WOL_INTERFACE` (optional)
-
-Example:
+To serve the built frontend from the Rust backend:
 
 ```bash
-docker build -t wolmgr-waker .
-docker run --rm \
-   -e TURSO_DATABASE_URL=... \
-   -e TURSO_AUTH_TOKEN=... \
-   wolmgr-waker
+pnpm build:frontend
+$env:STATIC_DIR="frontend/dist"
+cargo run -p wolmgr-backend
 ```
 
-## Notes
+## Environment
 
-- The user request mentioned `libsql-client-ts`, but that exact package name is not available on npm; this project uses the official libSQL/Turso TypeScript client: `@libsql/client`.
+Backend variables:
 
-Now the UI, worker, and (optional) RouterOS script all share the same Turso-backed state—no Durable Objects necessary.
+- `DATABASE_URL` defaults to `sqlite:./wolmgr.sqlite3`.
+- `BIND_ADDR` defaults to `127.0.0.1:8787`.
+- `PUBLIC_ORIGIN` is used for OAuth callback URLs and secure cookie detection.
+- `STATIC_DIR` optionally serves frontend static files from the backend.
+- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` enable GitHub OAuth.
+- `BROKER_API_TOKEN` protects broker automation endpoints.
+
+Frontend variable:
+
+- `PUBLIC_API_BASE_URL` optionally points browser API calls to another backend origin. Leave it empty for same-origin/proxy mode.
+
+## ESP32-S3 Broker
+
+The broker lives in `broker/esp32-s3` and is intentionally excluded from the root Cargo workspace because it targets `xtensa-esp32s3-espidf`.
+
+```bash
+cd broker/esp32-s3
+WIFI_SSID="your-ssid" \
+WIFI_PASS="your-password" \
+WOLMGR_API_BASE_URL="http://192.168.1.10:8787" \
+BROKER_API_TOKEN="same-as-backend-token" \
+MCU=esp32s3 \
+cargo espflash flash --release --monitor
+```
+
+Optional broker compile-time variables:
+
+- `POLL_INTERVAL_MS` defaults to `10000`.
+- `WOL_BROADCAST_ADDR` defaults to `255.255.255.255`.
+- `WOL_PORT` defaults to `9`.
+
+## Docker
+
+```bash
+docker build -t wolmgr .
+docker run --rm -p 8787:8787 -v wolmgr-data:/data \
+  -e PUBLIC_ORIGIN=http://localhost:8787 \
+  -e BROKER_API_TOKEN=change-me \
+  wolmgr
+```
+
+## Current Notes
+
+- Passkey routes are preserved but return `501` in the Rust backend until WebAuthn is migrated from the old TypeScript implementation.
+- GitHub OAuth, sessions, devices, WOL task queueing, and broker polling/status updates are implemented in Rust.

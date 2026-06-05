@@ -1,51 +1,17 @@
 {
 	"name": "wolmgr",
-	"type": "module",
-	"description": "WOL Wake-on-LAN Manager that uses Cloudflare Pages + Turso (libSQL) for task persistence.",
-	"cloudflare": {
-		"label": "wolmgr",
-		"products": [
-			"Workers",
-			"Durable Objects"
-		],
-		"categories": [],
-		"preview_icon_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/4554c09f-835e-45bc-b0a2-7c86e374ca00/public",
-		"preview_image_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/a4f0dac8-ca71-4001-ac95-4036c400ed00/preview",
-		"publish": true
-	},
-	"dependencies": {
-		"@libsql/client": "^0.15.15",
-		"@simplewebauthn/browser": "^13.2.2",
-		"@simplewebauthn/server": "^13.2.2",
-		"nanoid": "5.1.6",
-		"react": "^19.0.4",
-		"react-dom": "^19.0.4",
-		"ros-client": "^1.1.2"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.3.10",
-		"@cloudflare/workers-types": "^4.20260207.0",
-		"@rsbuild/core": "^1.7.3",
-		"@rsbuild/plugin-react": "^1.4.5",
-		"@rslib/core": "^0.18.6",
-		"@tailwindcss/postcss": "^4.1.18",
-		"@types/node": "^24.10.11",
-		"@types/react": "^19.2.13",
-		"@types/react-dom": "^19.2.3",
-		"autoprefixer": "^10.4.24",
-		"postcss": "^8.5.6",
-		"tailwindcss": "^4.1.18",
-		"typescript": "5.9.3",
-		"wrangler": "4.54.0"
-	},
+	"description": "Wake-on-LAN manager with a React frontend, Rust backend, and ESP32-S3 Rust broker.",
 	"private": true,
 	"packageManager": "pnpm@10.28.2",
 	"scripts": {
-		"check": "pnpm exec biome check --write .",
-		"build:ui": "rsbuild build",
-		"build:worker": "rslib build",
-		"build": "pnpm -s build:ui && pnpm -s build:worker",
-		"deploy": "wrangler deploy",
-		"dev": "pnpm -s build && wrangler pages dev dist"
+		"check": "pnpm exec biome check --write . && cargo check -p wolmgr-backend",
+		"dev:frontend": "pnpm --dir frontend dev",
+		"dev:backend": "cargo run -p wolmgr-backend",
+		"build:frontend": "pnpm --dir frontend build",
+		"build:backend": "cargo build -p wolmgr-backend --release",
+		"build": "pnpm -s build:frontend && pnpm -s build:backend"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.10"
 	}
 }

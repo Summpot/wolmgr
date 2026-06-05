@@ -29,7 +29,7 @@ export type Device = {
 	updatedAt: number;
 };
 
-export type RouterOSWolResponse = {
+export type BrokerPendingTasksResponse = {
 	tasks: {
 		macAddress: string;
 		id: string;

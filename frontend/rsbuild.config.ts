@@ -3,9 +3,9 @@ import { pluginReact } from "@rsbuild/plugin-react";
 
 export default defineConfig({
 	plugins: [pluginReact()],
-	output: {
-		cleanDistPath: {
-			keep: [/dist\/_worker.js/],
+	server: {
+		proxy: {
+			"/api": "http://127.0.0.1:8787",
 		},
 	},
 });

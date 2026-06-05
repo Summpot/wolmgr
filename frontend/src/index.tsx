@@ -1,14 +1,15 @@
-import type React from "react";
-import { useCallback, useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
 import {
-	startAuthentication,
-	startRegistration,
 	type AuthenticationResponseJSON,
 	type PublicKeyCredentialCreationOptionsJSON,
 	type PublicKeyCredentialRequestOptionsJSON,
 	type RegistrationResponseJSON,
+	startAuthentication,
+	startRegistration,
 } from "@simplewebauthn/browser";
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { apiFetch, apiPath } from "./api";
 import type { Device, MeResponse, WolTask } from "./shared";
 
 import "./index.css";
@@ -178,7 +179,7 @@ function App() {
 
 	const fetchMe = useCallback(async () => {
 		try {
-			const res = await fetch("/api/me");
+			const res = await apiFetch("/api/me");
 			const data = (await res.json()) as MeResponse;
 			setMe(data);
 		} catch (err) {
@@ -189,7 +190,7 @@ function App() {
 
 	const fetchDevices = useCallback(async () => {
 		if (!user) return;
-		const res = await fetch("/api/devices");
+		const res = await apiFetch("/api/devices");
 		if (!res.ok) return;
 		const data = (await res.json()) as { devices?: Device[] };
 		setDevices(data.devices ?? []);
@@ -199,7 +200,7 @@ function App() {
 		if (!user) return;
 		try {
 			setIsRefreshing(true);
-			const response = await fetch("/api/wol/tasks");
+			const response = await apiFetch("/api/wol/tasks");
 			if (!response.ok) {
 				return;
 			}
@@ -230,14 +231,16 @@ function App() {
 
 	const handleGitHubLogin = () => {
 		setAuthError("");
-		window.location.href = `/api/auth/github/start?redirectTo=${encodeURIComponent("/")}`;
+		window.location.href = apiPath(
+			`/api/auth/github/start?redirectTo=${encodeURIComponent("/")}`,
+		);
 	};
 
 	const handleLogout = async () => {
 		setAuthError("");
 		setIsAuthBusy(true);
 		try {
-			await fetch("/api/auth/logout", { method: "POST" });
+			await apiFetch("/api/auth/logout", { method: "POST" });
 			await fetchMe();
 		} finally {
 			setIsAuthBusy(false);
@@ -248,9 +251,13 @@ function App() {
 		setAuthError("");
 		setIsPasskeyBusy(true);
 		try {
-			const startRes = await fetch("/api/passkey/login/start", { method: "POST" });
+			const startRes = await apiFetch("/api/passkey/login/start", {
+				method: "POST",
+			});
 			if (!startRes.ok) {
-				const payload = (await startRes.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await startRes.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setAuthError(payload?.error ?? "Failed to start passkey login.");
 				return;
 			}
@@ -263,13 +270,15 @@ function App() {
 				optionsJSON: startPayload.options,
 			})) as AuthenticationResponseJSON;
 
-			const finishRes = await fetch("/api/passkey/login/finish", {
+			const finishRes = await apiFetch("/api/passkey/login/finish", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ stateId: startPayload.stateId, response }),
 			});
 			if (!finishRes.ok) {
-				const payload = (await finishRes.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await finishRes.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setAuthError(payload?.error ?? "Passkey login failed.");
 				return;
 			}
@@ -286,9 +295,13 @@ function App() {
 		setError("");
 		setIsPasskeyBusy(true);
 		try {
-			const startRes = await fetch("/api/passkey/register/start", { method: "POST" });
+			const startRes = await apiFetch("/api/passkey/register/start", {
+				method: "POST",
+			});
 			if (!startRes.ok) {
-				const payload = (await startRes.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await startRes.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setError(payload?.error ?? "Failed to start passkey registration.");
 				return;
 			}
@@ -301,13 +314,15 @@ function App() {
 				optionsJSON: startPayload.options,
 			})) as RegistrationResponseJSON;
 
-			const finishRes = await fetch("/api/passkey/register/finish", {
+			const finishRes = await apiFetch("/api/passkey/register/finish", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ stateId: startPayload.stateId, response }),
 			});
 			if (!finishRes.ok) {
-				const payload = (await finishRes.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await finishRes.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setError(payload?.error ?? "Passkey registration failed.");
 				return;
 			}
@@ -334,7 +349,7 @@ function App() {
 		}
 		setIsSubmitting(true);
 		try {
-			const res = await fetch("/api/devices", {
+			const res = await apiFetch("/api/devices", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -343,7 +358,9 @@ function App() {
 				}),
 			});
 			if (!res.ok) {
-				const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await res.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setError(payload?.error ?? "Failed to add device.");
 				return;
 			}
@@ -362,11 +379,13 @@ function App() {
 		setError("");
 		setIsSubmitting(true);
 		try {
-			const res = await fetch(`/api/devices/${encodeURIComponent(id)}`, {
+			const res = await apiFetch(`/api/devices/${encodeURIComponent(id)}`, {
 				method: "DELETE",
 			});
 			if (!res.ok) {
-				const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await res.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setError(payload?.error ?? "Failed to remove device.");
 				return;
 			}
@@ -380,11 +399,16 @@ function App() {
 		setError("");
 		setIsSubmitting(true);
 		try {
-			const res = await fetch(`/api/devices/${encodeURIComponent(id)}/wake`, {
-				method: "POST",
-			});
+			const res = await apiFetch(
+				`/api/devices/${encodeURIComponent(id)}/wake`,
+				{
+					method: "POST",
+				},
+			);
 			if (!res.ok) {
-				const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+				const payload = (await res.json().catch(() => null)) as {
+					error?: string;
+				} | null;
 				setError(payload?.error ?? "Failed to queue wake task.");
 				return;
 			}
@@ -448,7 +472,9 @@ function App() {
 							<Icons.Server />
 							<div>
 								<div className="nb-brand__title">wolmgr</div>
-								<div className="nb-tagline">Wake-on-LAN manager with GitHub OAuth + Passkeys.</div>
+								<div className="nb-tagline">
+									Wake-on-LAN manager with GitHub OAuth + Passkeys.
+								</div>
 							</div>
 						</div>
 						<div className="nb-doodles" aria-hidden="true">
@@ -457,11 +483,9 @@ function App() {
 					</div>
 					<div className="nb-card nb-card--yellow">
 						<span className="nb-sticker">BOOTING</span>
-						<p style={{ margin: 0 }}>
-							Loading your dashboard…
-						</p>
+						<p style={{ margin: 0 }}>Loading your dashboard…</p>
 						<p style={{ margin: "10px 0 0", opacity: 0.8, fontSize: 13 }}>
-							If this takes long, check your Worker/API availability.
+							If this takes long, check your backend/API availability.
 						</p>
 					</div>
 				</div>
@@ -479,11 +503,14 @@ function App() {
 								<Icons.Server />
 								<div>
 									<div className="nb-brand__title">wolmgr</div>
-									<div className="nb-tagline">Sign in to manage devices and wake them in one click.</div>
+									<div className="nb-tagline">
+										Sign in to manage devices and wake them in one click.
+									</div>
 								</div>
 							</div>
 							<div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>
-								<span aria-hidden="true">↳</span> Startup vibes, serious packets.
+								<span aria-hidden="true">↳</span> Startup vibes, serious
+								packets.
 							</div>
 						</div>
 						<div className="nb-doodles" aria-hidden="true">
@@ -512,7 +539,10 @@ function App() {
 							</button>
 						</div>
 						{authError && (
-							<div className="nb-alert nb-alert--error" style={{ marginTop: 12 }}>
+							<div
+								className="nb-alert nb-alert--error"
+								style={{ marginTop: 12 }}
+							>
 								<Icons.AlertCircle />
 								<div className="nb-alert__text">{authError}</div>
 							</div>
@@ -523,7 +553,9 @@ function App() {
 		);
 	}
 
-	const deviceNameById = new Map(devices.map((d) => [d.id, d.name ?? d.macAddress]));
+	const deviceNameById = new Map(
+		devices.map((d) => [d.id, d.name ?? d.macAddress]),
+	);
 
 	return (
 		<div className="nb-page">
@@ -535,7 +567,8 @@ function App() {
 							<div>
 								<div className="nb-brand__title">wolmgr</div>
 								<div className="nb-tagline">
-									Signed in as <span style={{ fontWeight: 900 }}>{user.githubLogin}</span>
+									Signed in as{" "}
+									<span style={{ fontWeight: 900 }}>{user.githubLogin}</span>
 								</div>
 							</div>
 						</div>
@@ -617,7 +650,14 @@ function App() {
 							{devices.map((d) => (
 								<div key={d.id} className="nb-item">
 									<div style={{ minWidth: 0 }}>
-										<div className="nb-item__title" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+										<div
+											className="nb-item__title"
+											style={{
+												whiteSpace: "nowrap",
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+											}}
+										>
 											{d.name ?? "Unnamed device"}
 										</div>
 										<div className="nb-item__sub">{d.macAddress}</div>
@@ -658,15 +698,28 @@ function App() {
 
 				<div className="nb-topbar" style={{ marginTop: 4 }}>
 					<div>
-						<div style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.03em" }}>
+						<div
+							style={{
+								fontWeight: 900,
+								fontSize: 18,
+								letterSpacing: "-0.03em",
+							}}
+						>
 							Recent tasks
 						</div>
 						<div style={{ fontSize: 12, opacity: 0.8 }}>
 							Auto-refreshes every 5s (and you can smack the refresh button).
 						</div>
 					</div>
-					<button type="button" onClick={fetchTasks} className="nb-iconbtn" title="Refresh tasks">
-						<Icons.Refresh className={`w-5 h-5 ${isRefreshing ? "nb-spin" : ""}`} />
+					<button
+						type="button"
+						onClick={fetchTasks}
+						className="nb-iconbtn"
+						title="Refresh tasks"
+					>
+						<Icons.Refresh
+							className={`w-5 h-5 ${isRefreshing ? "nb-spin" : ""}`}
+						/>
 					</button>
 				</div>
 
@@ -682,7 +735,14 @@ function App() {
 						<tbody>
 							{tasks.length === 0 ? (
 								<tr>
-									<td colSpan={3} style={{ padding: "22px 16px", textAlign: "center", opacity: 0.8 }}>
+									<td
+										colSpan={3}
+										style={{
+											padding: "22px 16px",
+											textAlign: "center",
+											opacity: 0.8,
+										}}
+									>
 										No tasks yet.
 									</td>
 								</tr>
@@ -697,7 +757,9 @@ function App() {
 										<tr key={task.id}>
 											<td>
 												<div style={{ fontWeight: 900 }}>{label}</div>
-												<div style={{ fontSize: 12, opacity: 0.78 }}>{task.macAddress}</div>
+												<div style={{ fontSize: 12, opacity: 0.78 }}>
+													{task.macAddress}
+												</div>
 											</td>
 											<td>
 												<span className={statusConfig.className}>
@@ -705,7 +767,14 @@ function App() {
 													{statusConfig.label}
 												</span>
 											</td>
-											<td style={{ textAlign: "right", whiteSpace: "nowrap", fontSize: 12, opacity: 0.82 }}>
+											<td
+												style={{
+													textAlign: "right",
+													whiteSpace: "nowrap",
+													fontSize: 12,
+													opacity: 0.82,
+												}}
+											>
 												{formatDate(task.updatedAt)}
 											</td>
 										</tr>
