@@ -15,6 +15,8 @@ MQTT_TOPIC_PREFIX="wolmgr/wol" \
 cargo espflash flash --release --monitor
 ```
 
+`MQTT_HOST` should be the LAN IP of the machine running the Rust backend. The backend embeds an MQTT broker by default, so no separate broker is needed unless `MQTT_URL` is configured on the backend.
+
 Optional compile-time settings:
 
 - `MQTT_USERNAME` and `MQTT_PASSWORD` authenticate to the MQTT broker.

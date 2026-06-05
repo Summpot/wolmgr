@@ -7,7 +7,7 @@ wolmgr is a Wake-on-LAN manager with a separated React frontend, a Rust backend,
 - **Frontend:** React + Rsbuild in `frontend/`. Production assets are embedded into the Rust backend binary.
 - **Backend:** Axum + Toasty in `backend/`. It owns authentication/session state, devices, WOL task rows, and the MQTT bridge.
 - **Database:** Toasty with the SQLite driver by default. Set `DATABASE_URL`, for example `sqlite:./wolmgr.sqlite3`.
-- **MQTT:** The backend publishes WOL commands and subscribes to broker status updates.
+- **MQTT:** The backend embeds a local MQTT broker by default, publishes WOL commands, and subscribes to broker status updates.
 - **Broker:** ESP32-S3 Rust firmware in `broker/esp32-s3/`. It uses `esp-rs/esp-hal`, connects to Wi-Fi, subscribes to MQTT commands, sends UDP WOL packets, and publishes task status.
 
 ## REST API
@@ -66,8 +66,9 @@ Backend variables:
 - `DATABASE_URL` defaults to `sqlite:./wolmgr.sqlite3`.
 - `BIND_ADDR` defaults to `127.0.0.1:8787`.
 - `PUBLIC_ORIGIN` is used for OAuth callback URLs and secure cookie detection.
-- `MQTT_URL` defaults to `mqtt://127.0.0.1:1883`.
-- `MQTT_USERNAME` and `MQTT_PASSWORD` optionally authenticate to the MQTT broker.
+- `MQTT_BIND_ADDR` defaults to `0.0.0.0:1883` and controls the embedded MQTT broker listener.
+- `MQTT_URL` optionally points the backend at an external broker. When unset, the embedded broker starts automatically and the backend connects to it.
+- `MQTT_USERNAME` and `MQTT_PASSWORD` optionally authenticate to the MQTT broker. For the embedded broker, setting `MQTT_USERNAME` enables simple username/password auth.
 - `MQTT_CLIENT_ID` defaults to a generated backend client ID.
 - `MQTT_TOPIC_PREFIX` defaults to `wolmgr/wol`.
 - `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` enable GitHub OAuth.
@@ -92,6 +93,8 @@ MQTT_TOPIC_PREFIX="wolmgr/wol" \
 cargo espflash flash --release --monitor
 ```
 
+Use the LAN IP of the machine running the backend for `MQTT_HOST`; when the backend runs in Docker, publish `-p 1883:1883` as shown below.
+
 Optional broker compile-time variables:
 
 - `MQTT_CLIENT_ID` defaults to `wolmgr-esp32s3`.
@@ -103,11 +106,12 @@ Optional broker compile-time variables:
 
 ```bash
 docker build -t wolmgr .
-docker run --rm -p 8787:8787 -v wolmgr-data:/data \
+docker run --rm -p 8787:8787 -p 1883:1883 -v wolmgr-data:/data \
   -e PUBLIC_ORIGIN=http://localhost:8787 \
-  -e MQTT_URL=mqtt://host.docker.internal:1883 \
   wolmgr
 ```
+
+By default this container starts both the HTTP backend and the embedded MQTT broker. Set `MQTT_URL` only if you want to use a separate external MQTT broker.
 
 ## Current Notes
 
