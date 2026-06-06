@@ -6,10 +6,17 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Additional image tag (e.g. v1.0.0)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -116,9 +123,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create merged manifest
+        shell: bash
         run: |
-          docker buildx imagetools create \
-            --tag "${{ steps.image.outputs.name }}:${{ github.sha }}" \
-            --tag "${{ steps.image.outputs.name }}:latest" \
-            "${{ steps.image.outputs.name }}:${{ github.sha }}-amd64" \
+          args=(
+            --tag "${{ steps.image.outputs.name }}:${{ github.sha }}"
+            --tag "${{ steps.image.outputs.name }}:latest"
+          )
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            args+=(--tag "${{ steps.image.outputs.name }}:${{ inputs.tag }}")
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            args+=(--tag "${{ steps.image.outputs.name }}:${GITHUB_REF#refs/tags/}")
+          fi
+          args+=(
+            "${{ steps.image.outputs.name }}:${{ github.sha }}-amd64"
             "${{ steps.image.outputs.name }}:${{ github.sha }}-arm64"
+          )
+          docker buildx imagetools create "${args[@]}"
