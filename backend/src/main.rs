@@ -1,6 +1,4 @@
-use std::{
-    collections::HashMap, env, net::SocketAddr, sync::Arc, thread, time::Duration as StdDuration,
-};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration as StdDuration};
 
 use anyhow::{Context, Result};
 use axum::{
@@ -13,8 +11,14 @@ use axum::{
 use cookie::{Cookie, SameSite};
 use nanoid::nanoid;
 use reqwest::Client as HttpClient;
+use rmqtt::{
+    context::ServerContext,
+    hook::{self, Handler, HookResult, Parameter, ReturnType},
+    net::Builder as RmqttBuilder,
+    server::MqttServer,
+    types::AuthResult,
+};
 use rumqttc::{AsyncClient as MqttAsyncClient, Event, Incoming, MqttOptions, QoS, Transport};
-use rumqttd::{Broker, Config as BrokerConfig, ConnectionSettings, RouterConfig, ServerSettings};
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use time::{Duration as TimeDuration, OffsetDateTime};
@@ -69,6 +73,7 @@ struct MqttConfig {
 #[derive(Debug, Clone)]
 struct EmbeddedMqttConfig {
     bind_addr: SocketAddr,
+    ws_bind_addr: SocketAddr,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -264,10 +269,16 @@ impl MqttConfig {
             .unwrap_or_else(|| "0.0.0.0:1883".to_string())
             .parse()
             .context("invalid MQTT_BIND_ADDR")?;
-        let embedded = external_url
-            .is_none()
-            .then_some(EmbeddedMqttConfig { bind_addr });
-        let url = external_url.unwrap_or_else(|| format!("mqtt://127.0.0.1:{}", bind_addr.port()));
+        let ws_bind_addr: SocketAddr = env_optional("MQTT_WS_BIND_ADDR")
+            .unwrap_or_else(|| "0.0.0.0:8083".to_string())
+            .parse()
+            .context("invalid MQTT_WS_BIND_ADDR")?;
+        let embedded = external_url.is_none().then_some(EmbeddedMqttConfig {
+            bind_addr,
+            ws_bind_addr,
+        });
+        let url =
+            external_url.unwrap_or_else(|| format!("ws://127.0.0.1:{}/mqtt", ws_bind_addr.port()));
 
         Ok(Self {
             url,
@@ -293,62 +304,86 @@ impl MqttConfig {
 }
 
 fn start_embedded_mqtt_broker(embedded: &EmbeddedMqttConfig, mqtt: &MqttConfig) -> Result<()> {
-    let mut v4 = HashMap::new();
-    v4.insert(
-        "main".to_string(),
-        ServerSettings {
-            name: "wolmgr-mqtt".to_string(),
-            listen: embedded.bind_addr,
-            tls: None,
-            next_connection_delay_ms: 1,
-            connections: ConnectionSettings {
-                connection_timeout_ms: 60_000,
-                max_payload_size: 20_480,
-                max_inflight_count: 100,
-                auth: mqtt.username.as_ref().map(|username| {
-                    let mut auth = HashMap::new();
-                    auth.insert(username.clone(), mqtt.password.clone().unwrap_or_default());
-                    auth
-                }),
-                external_auth: None,
-                dynamic_filters: true,
-            },
-        },
-    );
+    let allow_anonymous = mqtt.username.is_none();
+    let tcp_listener = RmqttBuilder::new()
+        .name("wolmgr-mqtt/tcp")
+        .laddr(embedded.bind_addr)
+        .allow_anonymous(allow_anonymous)
+        .bind()
+        .context("failed to bind embedded MQTT TCP listener")?
+        .tcp()
+        .context("failed to configure embedded MQTT TCP listener")?;
+    let ws_listener = RmqttBuilder::new()
+        .name("wolmgr-mqtt/ws")
+        .laddr(embedded.ws_bind_addr)
+        .allow_anonymous(allow_anonymous)
+        .bind()
+        .context("failed to bind embedded MQTT WebSocket listener")?
+        .ws()
+        .context("failed to configure embedded MQTT WebSocket listener")?;
 
-    let config = BrokerConfig {
-        id: 0,
-        router: RouterConfig {
-            max_connections: 128,
-            max_outgoing_packet_count: 200,
-            max_segment_size: 1024 * 1024,
-            max_segment_count: 4,
-            custom_segment: None,
-            initialized_filters: None,
-            shared_subscriptions_strategy: Default::default(),
-        },
-        v4: Some(v4),
-        v5: None,
-        ws: None,
-        cluster: None,
-        console: None,
-        bridge: None,
-        prometheus: None,
-        metrics: None,
-    };
-
+    let username = mqtt.username.clone();
+    let password = mqtt.password.clone().unwrap_or_default();
     let bind_addr = embedded.bind_addr;
-    thread::Builder::new()
-        .name("wolmgr-mqtt-broker".to_string())
-        .spawn(move || {
-            let mut broker = Broker::new(config);
-            if let Err(err) = broker.start() {
-                tracing::error!(error = ?err, "embedded MQTT broker stopped");
-            }
-        })
-        .context("failed to spawn embedded MQTT broker thread")?;
-    tracing::info!(%bind_addr, "embedded MQTT broker starting");
+    let ws_bind_addr = embedded.ws_bind_addr;
+
+    tokio::spawn(async move {
+        let scx = ServerContext::new().build().await;
+        if let Some(username) = username {
+            let register = scx.extends.hook_mgr().register();
+            register
+                .add(
+                    hook::Type::ClientAuthenticate,
+                    Box::new(EmbeddedBrokerAuth { username, password }),
+                )
+                .await;
+            register.start().await;
+        }
+
+        let server = MqttServer::new(scx)
+            .listener(tcp_listener)
+            .listener(ws_listener)
+            .build();
+        tracing::info!(%bind_addr, %ws_bind_addr, "embedded MQTT broker starting");
+        if let Err(err) = server.run().await {
+            tracing::error!(error = ?err, "embedded MQTT broker stopped");
+        }
+    });
+
     Ok(())
+}
+
+struct EmbeddedBrokerAuth {
+    username: String,
+    password: String,
+}
+
+#[async_trait::async_trait]
+impl Handler for EmbeddedBrokerAuth {
+    async fn hook(&self, param: &Parameter, _acc: Option<HookResult>) -> ReturnType {
+        let Parameter::ClientAuthenticate(connect_info) = param else {
+            return (true, None);
+        };
+
+        let username_matches = connect_info
+            .username()
+            .is_some_and(|username| username.as_ref() == self.username);
+        let password_matches = connect_info
+            .password()
+            .is_some_and(|password| password.as_ref() == self.password.as_bytes());
+
+        if username_matches && password_matches {
+            (
+                false,
+                Some(HookResult::AuthResult(AuthResult::Allow(false, None))),
+            )
+        } else {
+            (
+                false,
+                Some(HookResult::AuthResult(AuthResult::BadUsernameOrPassword)),
+            )
+        }
+    }
 }
 
 async fn setup_mqtt(db: &Db, config: &MqttConfig) -> Result<MqttPublisher> {
@@ -386,17 +421,32 @@ fn mqtt_options(config: &MqttConfig) -> Result<MqttOptions> {
     let default_port = match scheme {
         "mqtt" | "tcp" => 1883,
         "mqtts" | "ssl" => 8883,
+        "ws" => 80,
+        "wss" => 443,
         other => anyhow::bail!("unsupported MQTT_URL scheme: {other}"),
     };
     let mut options = MqttOptions::new(
         config.client_id.clone(),
-        host,
+        if matches!(scheme, "ws" | "wss") {
+            config.url.clone()
+        } else {
+            host
+        },
         parsed.port().unwrap_or(default_port),
     );
     options.set_keep_alive(StdDuration::from_secs(30));
 
-    if matches!(scheme, "mqtts" | "ssl") {
-        options.set_transport(Transport::tls_with_default_config());
+    match scheme {
+        "mqtts" | "ssl" => {
+            options.set_transport(Transport::tls_with_default_config());
+        }
+        "ws" => {
+            options.set_transport(Transport::ws());
+        }
+        "wss" => {
+            options.set_transport(Transport::wss_with_default_config());
+        }
+        _ => {}
     }
 
     let username = config

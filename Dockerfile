@@ -29,7 +29,8 @@ COPY --from=backend-builder /app/target/release/wolmgr-backend /usr/local/bin/wo
 ENV BIND_ADDR=0.0.0.0:8787
 ENV DATABASE_URL=sqlite:/data/wolmgr.sqlite3
 ENV MQTT_BIND_ADDR=0.0.0.0:1883
+ENV MQTT_WS_BIND_ADDR=0.0.0.0:8083
 VOLUME ["/data"]
-EXPOSE 8787 1883
+EXPOSE 8787 1883 8083
 
 CMD ["wolmgr-backend"]
