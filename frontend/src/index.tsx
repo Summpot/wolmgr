@@ -63,7 +63,7 @@ const Icons = {
 			strokeWidth="2"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			className="w-8 h-8 text-blue-600"
+			className="w-8 h-8 text-indigo"
 		>
 			<title>Server</title>
 			<rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
@@ -83,7 +83,7 @@ const Icons = {
 			strokeWidth="2"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			className="w-5 h-5 text-red-500"
+			className="w-5 h-5 text-terracotta"
 		>
 			<title>Error</title>
 			<circle cx="12" cy="12" r="10" />
@@ -160,6 +160,22 @@ const Icons = {
 		</svg>
 	),
 };
+
+const CARD =
+	"relative bg-cream rounded-[1.25rem] border border-dashed border-stitch p-[clamp(16px,2.2vw,24px)] transition-all duration-200 ease-out";
+const CARD_HOVER = "hover:shadow-card-hover hover:-translate-y-0.5";
+const CARD_ACTIVE = "active:shadow-card-active active:translate-y-0.5";
+
+const BTN_BASE =
+	"inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-full font-semibold tracking-[0.01em] border border-dashed border-stitch transition-all duration-200 ease-out select-none";
+const BTN_HOVER = "hover:shadow-btn-hover hover:-translate-y-0.5";
+const BTN_ACTIVE = "active:shadow-btn-active active:translate-y-0.5";
+const BTN_DISABLED = "disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none";
+const BTN_FOCUS =
+	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ochre/50 focus-visible:ring-offset-2";
+
+const TAG =
+	"absolute -top-3 right-3.5 rotate-[5deg] px-3 py-1.5 rounded-full border border-dashed border-stitch text-xs font-extrabold tracking-wider shadow-btn";
 
 function App() {
 	const [me, setMe] = useState<MeResponse | null>(null);
@@ -418,35 +434,38 @@ function App() {
 		}
 	};
 
+	const chipBase =
+		"inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full font-extrabold text-xs border border-dashed border-stitch shadow-chip";
+
 	const getStatusConfig = (status: string) => {
 		switch (status) {
 			case "pending":
 				return {
-					className: "nb-chip nb-chip--pending",
+					className: `${chipBase} bg-ochre-dim/70`,
 					icon: <Icons.Clock />,
 					label: "Pending",
 				};
 			case "processing":
 				return {
-					className: "nb-chip nb-chip--processing",
+					className: `${chipBase} bg-indigo-dim/70`,
 					icon: <Icons.Activity />,
 					label: "Processing",
 				};
 			case "success":
 				return {
-					className: "nb-chip nb-chip--success",
+					className: `${chipBase} bg-sage-dim/70`,
 					icon: <Icons.CheckCircle />,
 					label: "Sent",
 				};
 			case "failed":
 				return {
-					className: "nb-chip nb-chip--failed",
+					className: `${chipBase} bg-red-100/70`,
 					icon: <Icons.XCircle />,
 					label: "Failed",
 				};
 			default:
 				return {
-					className: "nb-chip",
+					className: `${chipBase} bg-white`,
 					icon: <Icons.Clock />,
 					label: status,
 				};
@@ -463,28 +482,32 @@ function App() {
 		});
 	};
 
+	const BrandBlock = ({ tagline }: { tagline: string }) => (
+		<div className="inline-flex items-center gap-2.5 px-3.5 py-2.5 bg-ochre-dim rounded-[1.25rem] border border-dashed border-stitch shadow-btn">
+			<Icons.Server />
+			<div>
+				<div className="font-extrabold tracking-tight text-[22px] leading-none">
+					wolmgr
+				</div>
+				<div className="text-sm opacity-90 leading-snug">{tagline}</div>
+			</div>
+		</div>
+	);
+
 	if (!me) {
 		return (
-			<div className="nb-page">
-				<div className="nb-container nb-stack">
-					<div className="nb-topbar">
-						<div className="nb-brand">
-							<Icons.Server />
-							<div>
-								<div className="nb-brand__title">wolmgr</div>
-								<div className="nb-tagline">
-									Wake-on-LAN manager with GitHub OAuth + Passkeys.
-								</div>
-							</div>
-						</div>
-						<div className="nb-doodles" aria-hidden="true">
-							✷ ⚡ ★
+			<div className="min-h-screen p-[clamp(18px,3vw,40px)]">
+				<div className="max-w-[980px] mx-auto grid gap-[18px]">
+					<div className="flex items-center justify-between gap-3.5 flex-wrap">
+						<BrandBlock tagline="Wake-on-LAN manager with GitHub OAuth + Passkeys." />
+						<div className="text-sm opacity-80" aria-hidden="true">
+							* ~ . ~ *
 						</div>
 					</div>
-					<div className="nb-card nb-card--yellow">
-						<span className="nb-sticker">BOOTING</span>
-						<p style={{ margin: 0 }}>Loading your dashboard…</p>
-						<p style={{ margin: "10px 0 0", opacity: 0.8, fontSize: 13 }}>
+					<div className={`${CARD} bg-ochre-dim/50 shadow-card`}>
+						<span className={`${TAG} bg-sage-dim text-thread`}>BOOTING</span>
+						<p>Loading your dashboard...</p>
+						<p className="mt-2.5 text-[13px] opacity-80">
 							If this takes long, check your backend/API availability.
 						</p>
 					</div>
@@ -495,37 +518,28 @@ function App() {
 
 	if (!user) {
 		return (
-			<div className="nb-page">
-				<div className="nb-container nb-stack">
-					<div className="nb-topbar">
+			<div className="min-h-screen p-[clamp(18px,3vw,40px)]">
+				<div className="max-w-[980px] mx-auto grid gap-[18px]">
+					<div className="flex items-center justify-between gap-3.5 flex-wrap">
 						<div>
-							<div className="nb-brand">
-								<Icons.Server />
-								<div>
-									<div className="nb-brand__title">wolmgr</div>
-									<div className="nb-tagline">
-										Sign in to manage devices and wake them in one click.
-									</div>
-								</div>
-							</div>
-							<div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>
-								<span aria-hidden="true">↳</span> Startup vibes, serious
-								packets.
-							</div>
+							<BrandBlock tagline="Sign in to manage devices and wake them in one click." />
+							<p className="mt-2.5 opacity-80 text-[13px]">
+								<span aria-hidden="true">~</span> Cozy, reliable Wake-on-LAN.
+							</p>
 						</div>
-						<div className="nb-doodles" aria-hidden="true">
-							⚡︎ NEW ✶ STUFF
+						<div className="text-sm opacity-80" aria-hidden="true">
+							sign in ~ welcome
 						</div>
 					</div>
 
-					<div className="nb-card nb-card--pink">
-						<span className="nb-sticker">SIGN IN</span>
-						<div className="nb-btnrow">
+					<div className={`${CARD} bg-terracotta-dim/40 shadow-card ${CARD_HOVER} ${CARD_ACTIVE}`}>
+						<span className={`${TAG} bg-sage-dim text-thread`}>SIGN IN</span>
+						<div className="flex flex-wrap gap-2.5">
 							<button
 								type="button"
 								onClick={handleGitHubLogin}
 								disabled={isAuthBusy || isPasskeyBusy}
-								className="nb-btn nb-btn--black"
+								className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-thread text-white shadow-btn`}
 							>
 								Sign in with GitHub
 							</button>
@@ -533,18 +547,15 @@ function App() {
 								type="button"
 								onClick={handlePasskeyLogin}
 								disabled={isAuthBusy || isPasskeyBusy}
-								className="nb-btn nb-btn--yellow"
+								className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-ochre shadow-btn`}
 							>
 								Sign in with Passkey
 							</button>
 						</div>
 						{authError && (
-							<div
-								className="nb-alert nb-alert--error"
-								style={{ marginTop: 12 }}
-							>
+							<div className="flex items-start gap-2.5 mt-3 px-3.5 py-3 bg-red-100/60 rounded-xl border border-dashed border-stitch shadow-btn">
 								<Icons.AlertCircle />
-								<div className="nb-alert__text">{authError}</div>
+								<div className="text-[13px] leading-[1.35]">{authError}</div>
 							</div>
 						)}
 					</div>
@@ -558,116 +569,112 @@ function App() {
 	);
 
 	return (
-		<div className="nb-page">
-			<div className="nb-container nb-stack">
-				<div className="nb-topbar">
-					<div>
-						<div className="nb-brand">
-							<Icons.Server />
-							<div>
-								<div className="nb-brand__title">wolmgr</div>
-								<div className="nb-tagline">
-									Signed in as{" "}
-									<span style={{ fontWeight: 900 }}>{user.githubLogin}</span>
-								</div>
-							</div>
-						</div>
-					</div>
-					<div className="nb-userchip">
+		<div className="min-h-screen p-[clamp(18px,3vw,40px)]">
+			<div className="max-w-[980px] mx-auto grid gap-[18px]">
+				<div className="flex items-center justify-between gap-3.5 flex-wrap">
+					<BrandBlock
+						tagline={`Signed in as ${user.githubLogin}`}
+					/>
+					<div className="inline-flex items-center gap-2.5 px-2.5 py-2 rounded-full bg-cream border border-dashed border-stitch shadow-btn">
 						{user.avatarUrl && (
 							<img
 								src={user.avatarUrl}
 								alt={user.githubLogin}
-								className="nb-avatar"
+								className="w-[38px] h-[38px] rounded-full border border-dashed border-stitch"
 							/>
 						)}
 						<button
 							type="button"
 							onClick={handleLogout}
 							disabled={isAuthBusy}
-							className="nb-btn nb-btn--ghost"
+							className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-white shadow-btn`}
 						>
 							Logout
 						</button>
 					</div>
 				</div>
 
-				<div className="nb-card nb-card--blue">
-					<span className="nb-sticker">PASSKEYS</span>
-					<div className="nb-card__header">
-						<h2 className="nb-card__title">Passkeys</h2>
-						<div className="nb-card__meta">Registered: {me.passkeyCount}</div>
+				<div className={`${CARD} bg-indigo-dim/40 shadow-card ${CARD_HOVER} ${CARD_ACTIVE}`}>
+					<span className={`${TAG} bg-sage-dim text-thread`}>PASSKEYS</span>
+					<div className="flex items-baseline justify-between gap-3 flex-wrap mb-2.5">
+						<h2 className="font-extrabold tracking-tight text-lg">
+							Passkeys
+						</h2>
+						<div className="text-xs opacity-75">
+							Registered: {me.passkeyCount}
+						</div>
 					</div>
 					<button
 						type="button"
 						onClick={handlePasskeyRegister}
 						disabled={isPasskeyBusy}
-						className="nb-btn nb-btn--blue"
+						className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-indigo text-white shadow-btn`}
 					>
 						Register a Passkey
 					</button>
 				</div>
 
-				<div className="nb-card nb-card--green">
-					<span className="nb-sticker">DEVICES</span>
-					<div className="nb-card__header">
-						<h2 className="nb-card__title">Your devices</h2>
-						<div className="nb-card__meta" aria-hidden="true">
-							⌁ add → wake → boom
+				<div className={`${CARD} bg-sage-dim/40 shadow-card ${CARD_HOVER} ${CARD_ACTIVE}`}>
+					<span className={`${TAG} bg-ochre-dim text-thread`}>DEVICES</span>
+					<div className="flex items-baseline justify-between gap-3 flex-wrap mb-2.5">
+						<h2 className="font-extrabold tracking-tight text-lg">
+							Your devices
+						</h2>
+						<div className="text-xs opacity-75" aria-hidden="true">
+							add ~ wake ~ done
 						</div>
 					</div>
-					<form onSubmit={handleAddDevice} className="nb-form">
+					<form
+						onSubmit={handleAddDevice}
+						className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_auto] gap-2.5 items-stretch"
+					>
 						<input
 							type="text"
 							value={deviceName}
 							onChange={(e) => setDeviceName(e.target.value)}
 							placeholder="Name (optional)"
-							className="nb-input"
+							className="w-full px-3.5 py-3 bg-white rounded-xl border border-dashed border-stitch shadow-btn transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-ochre/50 focus:ring-offset-1"
 						/>
 						<input
 							type="text"
 							value={deviceMac}
 							onChange={(e) => setDeviceMac(e.target.value.toUpperCase())}
 							placeholder="AA:BB:CC:DD:EE:FF"
-							className="nb-input nb-input--mono"
+							className="w-full px-3.5 py-3 bg-white rounded-xl border border-dashed border-stitch shadow-btn transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-ochre/50 focus:ring-offset-1 tracking-[0.02em]"
 							autoComplete="off"
 						/>
 						<button
 							type="submit"
 							disabled={isSubmitting}
-							className="nb-btn nb-btn--black"
+							className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-thread text-white shadow-btn`}
 						>
 							Add device
 						</button>
 					</form>
 
 					{devices.length === 0 ? (
-						<p style={{ margin: "12px 0 0", opacity: 0.8 }}>
-							No devices yet. Add one above.
-						</p>
+						<p className="mt-3 opacity-80">No devices yet. Add one above.</p>
 					) : (
-						<div className="nb-list">
+						<div className="grid gap-2.5 mt-2.5">
 							{devices.map((d) => (
-								<div key={d.id} className="nb-item">
-									<div style={{ minWidth: 0 }}>
-										<div
-											className="nb-item__title"
-											style={{
-												whiteSpace: "nowrap",
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-											}}
-										>
+								<div
+									key={d.id}
+									className="flex items-center justify-between gap-3 px-3 py-3 bg-white rounded-xl border border-dashed border-stitch shadow-btn transition-all duration-200 ease-out hover:shadow-card-hover hover:-translate-y-0.5"
+								>
+									<div className="min-w-0">
+										<div className="font-bold whitespace-nowrap overflow-hidden text-ellipsis">
 											{d.name ?? "Unnamed device"}
 										</div>
-										<div className="nb-item__sub">{d.macAddress}</div>
+										<div className="text-xs opacity-75">
+											{d.macAddress}
+										</div>
 									</div>
-									<div className="nb-btnrow">
+									<div className="flex flex-wrap gap-2.5">
 										<button
 											type="button"
 											onClick={() => handleWakeDevice(d.id)}
 											disabled={isSubmitting}
-											className="nb-btn nb-btn--yellow"
+											className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-ochre shadow-btn`}
 										>
 											<span aria-hidden="true">
 												<Icons.Zap />
@@ -678,7 +685,7 @@ function App() {
 											type="button"
 											onClick={() => handleRemoveDevice(d.id)}
 											disabled={isSubmitting}
-											className="nb-btn nb-btn--ghost"
+											className={`${BTN_BASE} ${BTN_HOVER} ${BTN_ACTIVE} ${BTN_DISABLED} ${BTN_FOCUS} bg-white shadow-btn`}
 										>
 											Remove
 										</button>
@@ -689,47 +696,47 @@ function App() {
 					)}
 
 					{error && (
-						<div className="nb-alert nb-alert--error" style={{ marginTop: 12 }}>
+						<div className="flex items-start gap-2.5 mt-3 px-3.5 py-3 bg-red-100/60 rounded-xl border border-dashed border-stitch shadow-btn">
 							<Icons.AlertCircle />
-							<div className="nb-alert__text">{error}</div>
+							<div className="text-[13px] leading-[1.35]">{error}</div>
 						</div>
 					)}
 				</div>
 
-				<div className="nb-topbar" style={{ marginTop: 4 }}>
+				<div className="flex items-center justify-between gap-3.5 flex-wrap mt-1">
 					<div>
-						<div
-							style={{
-								fontWeight: 900,
-								fontSize: 18,
-								letterSpacing: "-0.03em",
-							}}
-						>
+						<div className="font-extrabold tracking-tight text-lg">
 							Recent tasks
 						</div>
-						<div style={{ fontSize: 12, opacity: 0.8 }}>
-							Auto-refreshes every 5s (and you can smack the refresh button).
+						<div className="text-xs opacity-80">
+							Auto-refreshes every 5s.
 						</div>
 					</div>
 					<button
 						type="button"
 						onClick={fetchTasks}
-						className="nb-iconbtn"
+						className="w-11 h-11 grid place-items-center rounded-full bg-white border border-dashed border-stitch shadow-btn transition-all duration-200 ease-out hover:shadow-btn-hover hover:-translate-y-0.5 active:shadow-btn-active active:translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ochre/50 focus-visible:ring-offset-2"
 						title="Refresh tasks"
 					>
 						<Icons.Refresh
-							className={`w-5 h-5 ${isRefreshing ? "nb-spin" : ""}`}
+							className={`w-5 h-5 ${isRefreshing ? "animate-[fabric-spin_900ms_linear_infinite]" : ""}`}
 						/>
 					</button>
 				</div>
 
-				<div className="nb-tablewrap">
-					<table className="nb-table">
+				<div className="overflow-x-auto rounded-[1.25rem]">
+					<table className="w-full border-separate border-spacing-0 bg-white rounded-[1.25rem] border border-dashed border-stitch overflow-hidden shadow-card">
 						<thead>
 							<tr>
-								<th style={{ textAlign: "left" }}>Device</th>
-								<th style={{ textAlign: "left" }}>Status</th>
-								<th style={{ textAlign: "right" }}>Last Updated</th>
+								<th className="px-4 py-3.5 text-xs uppercase tracking-[0.12em] font-extrabold text-left bg-ochre-dim/50">
+									Device
+								</th>
+								<th className="px-4 py-3.5 text-xs uppercase tracking-[0.12em] font-extrabold text-left bg-ochre-dim/50">
+									Status
+								</th>
+								<th className="px-4 py-3.5 text-xs uppercase tracking-[0.12em] font-extrabold text-right bg-ochre-dim/50">
+									Last Updated
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -737,11 +744,7 @@ function App() {
 								<tr>
 									<td
 										colSpan={3}
-										style={{
-											padding: "22px 16px",
-											textAlign: "center",
-											opacity: 0.8,
-										}}
+										className="px-4 py-[22px] text-center opacity-80"
 									>
 										No tasks yet.
 									</td>
@@ -754,27 +757,25 @@ function App() {
 											? deviceNameById.get(task.deviceId)
 											: task.macAddress;
 									return (
-										<tr key={task.id}>
-											<td>
-												<div style={{ fontWeight: 900 }}>{label}</div>
-												<div style={{ fontSize: 12, opacity: 0.78 }}>
+										<tr
+											key={task.id}
+											className="transition-colors duration-200 hover:bg-indigo-dim/30"
+										>
+											<td className="px-4 py-3.5 border-b border-stitch/30">
+												<div className="font-bold">{label}</div>
+												<div className="text-xs opacity-75">
 													{task.macAddress}
 												</div>
 											</td>
-											<td>
+											<td className="px-4 py-3.5 border-b border-stitch/30">
 												<span className={statusConfig.className}>
-													<span aria-hidden="true">{statusConfig.icon}</span>
+													<span aria-hidden="true">
+														{statusConfig.icon}
+													</span>
 													{statusConfig.label}
 												</span>
 											</td>
-											<td
-												style={{
-													textAlign: "right",
-													whiteSpace: "nowrap",
-													fontSize: 12,
-													opacity: 0.82,
-												}}
-											>
+											<td className="px-4 py-3.5 border-b border-stitch/30 text-right whitespace-nowrap text-xs opacity-80">
 												{formatDate(task.updatedAt)}
 											</td>
 										</tr>
